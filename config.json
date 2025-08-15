@@ -1,0 +1,32 @@
+{
+  "analysis_parameters": {
+    "warning_deduplication_timeout_seconds_comment": "【V4.3新增】预警去重时间。当同级别预警消失超过这个秒数后，再次出现才会被重新记录。",
+    "warning_deduplication_timeout_seconds": 600,
+    "warning_levels_seconds_comment": "预警等级（键）以及对应的提前预警秒数（值）",
+    "warning_levels_seconds": {
+      "1": 900,
+      "2": 1800,
+      "3": 3600
+    },
+    "knots_to_mps_conversion_comment": "速度单位从 '节' 转换为 '米/秒' 的转换因子",
+    "knots_to_mps_conversion": 0.514444,
+    "warning_field_name_comment": "在要素类中用于存储预警等级的字段名称",
+    "warning_field_name": "Warning_Level",
+    "_comment_prediction_path_check_density_meters_comment": "【暂时禁用】在预测路径上，每隔多少米设置一个检查点，用于发现“镂空”禁捕区。值越小越精确，但性能开销越大。",
+    "_comment_prediction_path_check_density_meters": 500
+  },
+  "monitoring_parameters": {
+    "default_fishing_zones_comment": "【需要您手动配置】可捕鱼区域的Shapefile文件路径",
+    "default_fishing_zones": "Docs/Arc GIS data/eez_v11.shp",
+    "simplification_tolerance_comment": "【优化项】GeoJSON几何简化容差，值越大简化越多，文件越小。0表示不简化。",
+    "simplification_tolerance": 0.001
+  },
+  "gps_realtime_parameters": {
+    "nmea_sentence_id_comment": "要解析的NMEA语句类型，'$GPRMC' 是最常用的，包含了位置、速度和航向",
+    "nmea_sentence_id": "$GPRMC"
+  },
+  "logging": {
+    "comment": "日志系统配置。level可以是 DEBUG, INFO, WARNING, ERROR, CRITICAL",
+    "level": "INFO"
+  }
+}

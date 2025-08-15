@@ -1,0 +1,481 @@
+/* --- 全局与基础样式 --- */
+:root {
+    --primary-bg: #f8f9fa;
+    --panel-bg: rgba(255, 255, 255, 0.9);
+    --border-color: #dee2e6;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --text-color: #212529;
+    --text-muted: #6c757d;
+    --primary-accent: #007bff;
+    --primary-accent-hover: #0056b3;
+    --input-bg: #fff;
+    --input-border-focus: #80bdff;
+
+    /* 预警颜色 */
+    --warning-level-0-bg: rgba(255, 255, 255, 0.9);
+    --warning-level-0-text: var(--text-color);
+    --warning-level-1-bg: #dc3545; /* 红色 (最高等级) */
+    --warning-level-1-text: #fff;
+    --warning-level-2-bg: #fd7e14; /* 橙色 */
+    --warning-level-2-text: #fff;
+    --warning-level-3-bg: #fff3cd; /* 黄色 */
+    --warning-level-3-text: #856404;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    overflow: hidden;
+    background-color: var(--primary-bg);
+}
+
+#map {
+    height: 100%;
+    width: 100%;
+}
+
+/* --- 新增：侧边栏样式 --- */
+.sidebar {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 350px; /* 统一宽度 */
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-bg);
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    transition: transform 0.3s ease-in-out;
+    padding: 15px;
+    box-sizing: border-box;
+    gap: 15px;
+    overflow-y: auto;
+}
+
+#left-sidebar {
+    left: 0;
+    transform: translateX(-100%);
+}
+
+#left-sidebar.is-expanded {
+    transform: translateX(0);
+}
+
+#right-sidebar {
+    right: 0;
+    transform: translateX(100%);
+}
+
+#right-sidebar.is-expanded {
+    transform: translateX(0);
+}
+
+/* --- 新增：侧边栏切换按钮 --- */
+.sidebar-toggle {
+    position: absolute;
+    top: 50%;
+    width: 25px;
+    height: 50px;
+    background-color: var(--primary-accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    z-index: 1001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.sidebar-toggle:hover {
+    background-color: var(--primary-accent-hover);
+}
+
+/* 修正：将切换按钮定位在屏幕边缘，并确保其z-index高于侧边栏 */
+.sidebar-toggle {
+    position: fixed; /* 固定在视口 */
+    top: 50%;
+    transform: translateY(-50%); /* 垂直居中 */
+    width: 25px;
+    height: 50px;
+    background-color: var(--primary-accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    z-index: 1002; /* 确保在侧边栏之上 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    transition: background-color 0.2s, left 0.3s ease-in-out, right 0.3s ease-in-out; /* 添加left/right过渡 */
+}
+
+.sidebar-toggle:hover {
+    background-color: var(--primary-accent-hover);
+}
+
+.sidebar-toggle.left-toggle {
+    left: 0;
+    border-radius: 0 5px 5px 0;
+}
+
+.sidebar-toggle.right-toggle {
+    right: 0;
+    border-radius: 5px 0 0 5px;
+}
+
+
+/* --- 面板通用样式 (移除背景色和边框，由sidebar提供) --- */
+.panel {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 15px 20px;
+    box-shadow: 0 4px 12px var(--shadow-color);
+    backdrop-filter: blur(5px); /* 毛玻璃效果 */
+    transition: all 0.3s ease;
+}
+
+.panel h2 {
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text-color);
+}
+
+/* --- 连接设置面板 --- */
+#connection-settings .form-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+#connection-settings label {
+    flex: 0 0 70px; /* 固定标签宽度 */
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+#connection-settings input[type="text"] {
+    flex-grow: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--input-bg);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#connection-settings input[type="text"]:focus {
+    outline: none;
+    border-color: var(--input-border-focus);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+#connection-settings .button-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+}
+
+#connect-btn {
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: 500;
+    background-color: var(--primary-accent);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex-grow: 1; /* 占据更多空间 */
+}
+
+#connect-btn:hover {
+    background-color: var(--primary-accent-hover);
+}
+
+/* --- 系统状态面板 --- */
+#system-status-panel {
+    padding: 10px 20px; /* 稍微小一点的内边距 */
+}
+
+#system-status-panel .status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+
+#system-status-panel strong {
+    color: var(--text-muted);
+}
+
+/* --- 历史查询面板 --- */
+
+#history-query-panel .form-group-inline {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px; /* 调整间距 */
+}
+
+#history-query-panel .form-group-inline label {
+    flex: 0 0 70px; /* 固定标签宽度 */
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-right: 10px; /* 标签与输入框的间距 */
+}
+
+#history-query-panel input[type="datetime-local"] {
+    flex-grow: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--input-bg);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-size: 14px;
+}
+
+#history-query-panel input[type="datetime-local"]:focus {
+    outline: none;
+    border-color: var(--input-border-focus);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* 新增：历史查询中的船只选择器样式 */
+/* 统一历史查询中的选择器和输入框样式 */
+#history-query-panel .form-group select,
+#history-query-panel .form-group input[type="datetime-local"] {
+    flex-grow: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--input-bg);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-size: 14px;
+}
+
+#history-query-panel .form-group select {
+    appearance: none; /* 移除默认下拉箭头 */
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%20viewBox%3D%220%200%20292.4%20292.4%22%3E%3Cpath%20fill%3D%22%23007bff%22%20d%3D%22M287%20197.2L159.7%2069.8c-3-3-7.9-3-10.9%200L5.4%20197.2c-3%203-3%207.9%200%2010.9s7.9%203%2010.9%200L144%2086.1c3-3%207.9-3%2010.9%200l127.7%20127.7c3%203%207.9%203%2010.9%200s3-7.9%200-10.9z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px;
+}
+
+#history-query-panel .form-group select:focus,
+#history-query-panel .form-group input[type="datetime-local"]:focus {
+    outline: none;
+    border-color: var(--input-border-focus);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+
+/* 统一查询按钮和新添加的显示标签按钮的风格 */
+.action-btn {
+    padding: 8px 15px;
+    font-size: 14px;
+    font-weight: 500;
+    background-color: var(--primary-accent);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+    margin-top: 10px; /* 与上方输入框的间距 */
+}
+
+.action-btn:hover {
+    background-color: var(--primary-accent-hover);
+    transform: translateY(-1px);
+}
+
+.action-btn:active {
+    transform: translateY(0);
+}
+
+/* 实时状态面板内的锁定视角复选框靠左 */
+#status-panel .view-control {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px; /* 与下方内容的间距 */
+    margin-left: 0; /* 靠左对齐 */
+}
+
+#status-panel .view-control label {
+    font-size: 14px;
+    color: var(--text-muted);
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+/* 锁定视角标签颜色同步 */
+#status-panel.warning-level-1 .view-control label,
+#status-panel.warning-level-2 .view-control label {
+    color: white; /* 高对比度颜色 */
+}
+
+#status-panel.warning-level-3 .view-control label {
+    color: var(--warning-level-3-text); /* 保持深色 */
+}
+
+/* --- 状态面板 --- */
+#status-panel {
+    transition: background-color 0.5s ease, border-color 0.5s ease;
+}
+
+#status-content .status-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+#status-content .status-item:last-child {
+    border-bottom: none;
+}
+
+#status-content strong {
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+#status-content span {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+/* --- 预警等级样式 --- */
+#status-panel.warning-level-0 { background-color: var(--warning-level-0-bg); }
+#status-panel.warning-level-1 { background-color: var(--warning-level-1-bg); border-color: #dc3545; } /* 红色边框 */
+#status-panel.warning-level-2 { background-color: var(--warning-level-2-bg); border-color: #fd7e14; } /* 橙色边框 */
+#status-panel.warning-level-3 { background-color: var(--warning-level-3-bg); border-color: #ffc107; } /* 黄色边框 */
+
+#status-panel.warning-level-1 span, #status-panel.warning-level-1 strong { color: var(--warning-level-1-text); }
+#status-panel.warning-level-2 span, #status-panel.warning-level-2 strong { color: var(--warning-level-2-text); }
+#status-panel.warning-level-3 span, #status-panel.warning-level-3 strong { color: var(--warning-level-3-text); }
+
+
+/* --- 船只图标 --- */
+.boat-icon {
+    text-align: center;
+    line-height: 24px;
+    font-size: 24px;
+    color: #ff0000;
+    transform-origin: center center;
+}
+
+@keyframes blinker {
+  50% { opacity: 0.3; }
+}
+
+.blinking-icon {
+  animation: blinker 1s linear infinite;
+}
+
+/* 船只标签样式 */
+.boat-label {
+    /* 确保标签内容能正确撑开背景 */
+    display: inline-block;
+    width: auto; /* 确保宽度自动调整 */
+    height: auto; /* 确保高度自动调整 */
+    box-sizing: content-box; /* 确保 padding 不影响宽度计算 */
+    /* 移除 min-width 和 text-align: center; 依赖 padding 自动调整宽度 */
+}
+
+/* --- 船只列表面板 (V4.2) --- */
+#boat-list-panel h2 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 15px;
+}
+
+#boat-list-panel h2 span {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+#boat-list-panel #toggle-labels-btn {
+    margin-top: 0; /* 按钮在h2内部，不需要额外上边距 */
+    padding: 5px 10px; /* 按钮小一点 */
+    font-size: 12px;
+}
+
+#boat-list-panel {
+    max-height: 200px; /* 限制最大高度 */
+    overflow-y: auto; /* 超出高度时显示滚动条 */
+}
+
+#boat-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+#boat-list li {
+    display: flex; /* 使用flexbox布局 */
+    justify-content: space-between; /* 船只ID和图标两端对齐 */
+    align-items: center; /* 垂直居中 */
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 14px;
+}
+
+.boat-status-icon {
+    width: 24px; /* 图标大小 */
+    height: 24px;
+    margin-left: 10px; /* 与船只ID的间距 */
+    vertical-align: middle; /* 垂直居中对齐 */
+}
+
+#boat-list li:last-child {
+    border-bottom: none;
+}
+
+#boat-list li:hover {
+    background-color: #e9ecef; /* 鼠标悬停时的淡灰色背景 */
+}
+
+#boat-list li.selected {
+    background-color: #e7f1ff; /* 更柔和的淡蓝色背景 */
+    color: var(--primary-accent); /* 使用主题强调色作为文字颜色 */
+    font-weight: 500; /* 适中的字重 */
+    border-left: 3px solid var(--primary-accent); /* 左侧边框高亮 */
+    padding-left: 12px; /* 为左边框留出空间 */
+}
+
+/* --- 预警信息列表面板 --- */
+#warning-list-panel {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#warning-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+#warning-list li {
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 14px;
+}
+
+#warning-list li:last-child {
+    border-bottom: none;
+}

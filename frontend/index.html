@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>渔船离境智能预警系统</title>
+    <!-- 引入 Leaflet CSS 文件 -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    <!-- 引入我们自己的CSS文件 -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <!-- 左侧边栏 -->
+    <div id="left-sidebar" class="sidebar">
+        <div id="history-query-panel" class="panel">
+            <h2>历史查询</h2>
+            <div class="form-group">
+                <label for="history-boat-select">选择船只</label>
+                <select id="history-boat-select">
+                    <option value="all_boats">-- 所有船只 --</option>
+                    <option value="">-- 请选择船只 --</option>
+                    <!-- 船只列表将由JS动态填充 -->
+                </select>
+            </div>
+            <div class="form-group-inline">
+                <label for="start-time">开始时间</label>
+                <input type="datetime-local" id="start-time">
+            </div>
+            <div class="form-group-inline">
+                <label for="end-time">结束时间</label>
+                <input type="datetime-local" id="end-time">
+            </div>
+            <button id="query-history-btn" class="action-btn">查询</button>
+            <button id="clear-history-btn" class="action-btn">清除</button>
+        </div>
+        <div id="warning-list-panel" class="panel">
+            <h2>预警信息列表</h2>
+            <ul id="warning-list">
+                <!-- 预警信息将由JS动态填充 -->
+            </ul>
+        </div>
+    </div>
+    <button id="left-sidebar-toggle" class="sidebar-toggle left-toggle"><</button>
+
+    <!-- 右侧边栏 -->
+    <div id="right-sidebar" class="sidebar">
+        <div id="system-status-panel" class="panel">
+            <div class="status-item">
+                <strong>服务器连接状态:</strong>
+                <span id="status-text" style="color: red;">未连接</span>
+            </div>
+        </div>
+        <div id="boat-list-panel" class="panel">
+            <h2>
+                <span>船只列表</span>
+                <button id="toggle-labels-btn" class="action-btn">显示标签</button>
+            </h2>
+            <ul id="boat-list">
+                <!-- 船只列表将由JS动态填充 -->
+            </ul>
+        </div>
+        <div id="status-panel" class="panel">
+            <h2>实时状态 (当前选中)</h2>
+            <div class="view-control">
+                <input type="checkbox" id="lock-view-checkbox" checked>
+                <label for="lock-view-checkbox">锁定视角</label>
+            </div>
+            <div id="status-content">
+                <div class="status-item">
+                    <strong>船只ID</strong>
+                    <span id="boat-id-val">--</span>
+                </div>
+                <div class="status-item">
+                    <strong>船只名称</strong>
+                    <span id="boat-name-val">--</span>
+                </div>
+                <div class="status-item">
+                    <strong>经度</strong>
+                    <span id="lon-val">--</span>
+                </div>
+                <div class="status-item">
+                    <strong>纬度</strong>
+                    <span id="lat-val">--</span>
+                </div>
+                <div class="status-item">
+                    <strong>速度</strong>
+                    <span id="speed-val">-- knots</span>
+                </div>
+                <div class="status-item">
+                    <strong>航向</strong>
+                    <span id="bearing-val">-- °</span>
+                </div>
+                <div class="status-item">
+                    <strong>预警等级</strong>
+                <span id="warning-level-val">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <button id="right-sidebar-toggle" class="sidebar-toggle right-toggle">></button>
+
+    <!-- 引入 Leaflet JS 文件 -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+    <!-- 引入 Socket.IO 客户端库 -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <!-- 引入我们自己的JS文件 -->
+    <script src="js/main.js"></script>
+
+</body>
+</html>

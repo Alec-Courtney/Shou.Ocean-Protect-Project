@@ -18,8 +18,8 @@
     --warning-level-1-text: #fff;
     --warning-level-2-bg: #fd7e14; /* 橙色 */
     --warning-level-2-text: #fff;
-    --warning-level-3-bg: #fff3cd; /* 黄色 */
-    --warning-level-3-text: #856404;
+    --warning-level-3-bg: #ffc107; /* 调整为更深的黄色 */
+    --warning-level-3-text: #333; /* 深色文字以增强对比度 */
 }
 
 body, html {
@@ -33,7 +33,8 @@ body, html {
 
 #map {
     height: 100%;
-    width: 100%;
+    width: calc(100% - 280px); /* 为右侧边栏留出空间 */
+    margin-right: 280px; /* 右侧边栏的宽度 */
 }
 
 /* --- 新增：侧边栏样式 --- */
@@ -48,9 +49,9 @@ body, html {
     background-color: var(--panel-bg);
     box-shadow: 0 0 15px rgba(0,0,0,0.2);
     transition: transform 0.3s ease-in-out;
-    padding: 15px;
+    padding: 10px; /* 减小内边距 */
     box-sizing: border-box;
-    gap: 15px;
+    gap: 10px; /* 减小面板间距 */
     overflow-y: auto;
 }
 
@@ -65,11 +66,8 @@ body, html {
 
 #right-sidebar {
     right: 0;
-    transform: translateX(100%);
-}
-
-#right-sidebar.is-expanded {
-    transform: translateX(0);
+    width: 280px; /* 优化宽度 */
+    /* 移除 transform 以固定侧边栏 */
 }
 
 /* --- 新增：侧边栏切换按钮 --- */
@@ -125,8 +123,7 @@ body, html {
 }
 
 .sidebar-toggle.right-toggle {
-    right: 0;
-    border-radius: 5px 0 0 5px;
+    display: none; /* 隐藏右侧切换按钮 */
 }
 
 
@@ -134,18 +131,18 @@ body, html {
 .panel {
     background-color: transparent;
     border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 15px 20px;
-    box-shadow: 0 4px 12px var(--shadow-color);
+    border-radius: 6px; /* 减小圆角 */
+    padding: 10px 15px; /* 减小内边距 */
+    box-shadow: 0 2px 8px var(--shadow-color); /* 减小阴影 */
     backdrop-filter: blur(5px); /* 毛玻璃效果 */
     transition: all 0.3s ease;
 }
 
 .panel h2 {
-    margin: 0 0 15px 0;
-    padding-bottom: 10px;
+    margin: 0 0 10px 0; /* 减小下边距 */
+    padding-bottom: 8px; /* 减小下内边距 */
     border-bottom: 1px solid var(--border-color);
-    font-size: 16px;
+    font-size: 15px; /* 减小字体 */
     font-weight: 600;
     text-align: center;
     color: var(--text-color);
@@ -212,7 +209,7 @@ body, html {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 14px;
+    font-size: 13px; /* 减小字体 */
 }
 
 #system-status-panel strong {
@@ -252,8 +249,8 @@ body, html {
 
 /* 新增：历史查询中的船只选择器样式 */
 /* 统一历史查询中的选择器和输入框样式 */
-#history-query-panel .form-group select,
-#history-query-panel .form-group input[type="datetime-local"] {
+#history-query-panel .form-group-inline select,
+#history-query-panel .form-group-inline input[type="datetime-local"] {
     flex-grow: 1;
     padding: 8px 12px;
     border: 1px solid var(--border-color);
@@ -263,7 +260,7 @@ body, html {
     font-size: 14px;
 }
 
-#history-query-panel .form-group select {
+#history-query-panel .form-group-inline select {
     appearance: none; /* 移除默认下拉箭头 */
     background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%20viewBox%3D%220%200%20292.4%20292.4%22%3E%3Cpath%20fill%3D%22%23007bff%22%20d%3D%22M287%20197.2L159.7%2069.8c-3-3-7.9-3-10.9%200L5.4%20197.2c-3%203-3%207.9%200%2010.9s7.9%203%2010.9%200L144%2086.1c3-3%207.9-3%2010.9%200l127.7%20127.7c3%203%207.9%203%2010.9%200s3-7.9%200-10.9z%22%2F%3E%3C%2Fsvg%3E');
     background-repeat: no-repeat;
@@ -271,8 +268,8 @@ body, html {
     background-size: 12px;
 }
 
-#history-query-panel .form-group select:focus,
-#history-query-panel .form-group input[type="datetime-local"]:focus {
+#history-query-panel .form-group-inline select:focus,
+#history-query-panel .form-group-inline input[type="datetime-local"]:focus {
     outline: none;
     border-color: var(--input-border-focus);
     box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
@@ -335,8 +332,8 @@ body, html {
 #status-content .status-item {
     display: flex;
     justify-content: space-between;
-    padding: 8px 0;
-    font-size: 14px;
+    padding: 6px 0; /* 减小垂直内边距 */
+    font-size: 13px; /* 减小字体 */
     border-bottom: 1px solid var(--border-color);
 }
 #status-content .status-item:last-child {
@@ -402,7 +399,7 @@ body, html {
 }
 
 #boat-list-panel h2 span {
-    font-size: 16px;
+    font-size: 15px; /* 减小字体 */
     font-weight: 600;
     color: var(--text-color);
 }
@@ -414,8 +411,9 @@ body, html {
 }
 
 #boat-list-panel {
-    max-height: 200px; /* 限制最大高度 */
+    height: 160px; /* 固定高度以容纳约3个列表项和标题 */
     overflow-y: auto; /* 超出高度时显示滚动条 */
+    flex-shrink: 0; /* 防止被flex容器压缩 */
 }
 
 #boat-list {
@@ -428,17 +426,17 @@ body, html {
     display: flex; /* 使用flexbox布局 */
     justify-content: space-between; /* 船只ID和图标两端对齐 */
     align-items: center; /* 垂直居中 */
-    padding: 10px 15px;
+    padding: 8px 12px; /* 减小内边距 */
     border-bottom: 1px solid var(--border-color);
     cursor: pointer;
     transition: background-color 0.2s;
-    font-size: 14px;
+    font-size: 13px; /* 减小字体 */
 }
 
 .boat-status-icon {
-    width: 24px; /* 图标大小 */
-    height: 24px;
-    margin-left: 10px; /* 与船只ID的间距 */
+    width: 20px; /* 减小图标大小 */
+    height: 20px;
+    margin-left: 8px; /* 减小间距 */
     vertical-align: middle; /* 垂直居中对齐 */
 }
 
@@ -460,7 +458,7 @@ body, html {
 
 /* --- 预警信息列表面板 --- */
 #warning-list-panel {
-    max-height: 200px;
+    /* max-height: 200px; */ /* 移除最大高度限制 */
     overflow-y: auto;
 }
 
@@ -471,11 +469,76 @@ body, html {
 }
 
 #warning-list li {
-    padding: 10px 15px;
-    border-bottom: 1px solid var(--border-color);
+    /* padding: 10px 15px; */
+    /* border-bottom: 1px solid var(--border-color); */
     font-size: 14px;
+    margin-bottom: 10px; /* 增加列表项之间的间距 */
 }
 
 #warning-list li:last-child {
     border-bottom: none;
+    margin-bottom: 0;
+}
+
+/* --- 渔船预警信息列表容器 --- */
+#warning-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px; /* 弹窗之间的间距 */
+}
+
+/* 单个预警弹窗的样式 */
+.warning-popup {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    background-color: var(--panel-bg);
+    box-shadow: 0 4px 12px var(--shadow-color);
+    display: flex;
+    align-items: center;
+}
+
+.warning-popup-level {
+    width: 40px; /* 缩小尺寸 */
+    height: 40px; /* 缩小尺寸 */
+    border-radius: 6px;
+    background-color: var(--primary-accent);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px; /* 缩小字体 */
+    font-weight: bold;
+    margin-right: 10px; /* 调整间距 */
+    flex-shrink: 0;
+}
+
+.warning-popup-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* 垂直居中 */
+    align-items: flex-start; /* 水平居左 */
+    gap: 5px;
+    text-align: left; /* 文本居左 */
+    width: 100%;
+}
+
+.warning-popup-info .boat-info {
+    font-size: 14px; /* 缩小字体 */
+    font-weight: bold;
+}
+
+.warning-popup-info .boat-id {
+    margin-left: 8px;
+    color: var(--text-muted);
+}
+
+.warning-popup-info .time-info {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.warning-popup-info .location-info {
+    font-size: 12px; /* 缩小字体 */
+    font-weight: 500;
 }

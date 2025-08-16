@@ -19,7 +19,7 @@
     <div id="left-sidebar" class="sidebar">
         <div id="history-query-panel" class="panel">
             <h2>历史查询</h2>
-            <div class="form-group">
+            <div class="form-group-inline">
                 <label for="history-boat-select">选择船只</label>
                 <select id="history-boat-select">
                     <option value="all_boats">-- 所有船只 --</option>
@@ -101,8 +101,13 @@
                 </div>
             </div>
         </div>
+
+        <!-- 渔船预警信息列表容器 -->
+        <div id="warning-container">
+            <!-- 预警信息将由JS动态填充 -->
+        </div>
     </div>
-    <button id="right-sidebar-toggle" class="sidebar-toggle right-toggle">></button>
+    <!-- <button id="right-sidebar-toggle" class="sidebar-toggle right-toggle">></button> -->
 
     <!-- 引入 Leaflet JS 文件 -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -113,5 +118,7 @@
     <!-- 引入我们自己的JS文件 -->
     <script src="js/main.js"></script>
 
+    <!-- 新增：预警提示音 (使用本地文件) -->
+    <audio id="warning-sound" src="sounds/warning.wav" preload="auto"></audio>
 </body>
 </html>

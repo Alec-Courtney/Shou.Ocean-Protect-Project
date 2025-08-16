@@ -8,12 +8,13 @@
 - 使用 Socket.IO (基于WebSocket) 与前端进行双向实时通信。
 - 提供 FastAPI 应用来处理常规 HTTP API 请求。
 
-V4.2 更新亮点:
+V4.4 更新亮点:
 - 支持接收和存储船只名称 (`boat_name`)。
 - 智能预警记录: 避免重复记录持续性预警，仅在等级变化时记录。
 - 数据库查询优化: 为历史数据查询添加索引。
 - 历史轨迹数据抽稀: 减少前端渲染压力。
 - 可配置日志系统: 通过 `config.json` 控制日志级别。
+- 历史查询API增强: `/api/boats` 接口现在返回船只名称。
 """
 
 import os
@@ -99,7 +100,7 @@ app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 # =============================================================================
 config = {}                 # 存储从 config.json 加载的配置
 SOUND_PARAMS = {}           # 存储预构建的声音警报参数
-last_sent_times = {}        # 缓存每艘船上次通过WebSocket发送数据的时间戳 (V4.5新增)
+last_sent_times = {}        # 缓存每艘船上次通过WebSocket发送数据的时间戳 (V4.4新增)
 last_warning_state = {}     # 缓存每艘船的最后预警等级，用于去重 (V4.3新增)
 WEBSOCKET_SEND_INTERVAL = 0.5 # WebSocket数据发送最小间隔（秒），用于节流，缓解前端地图更新卡顿和不同步问题
 
@@ -333,7 +334,7 @@ async def get_all_boats():
     """
     conn = get_db_connection()
     try:
-        boats = conn.execute("SELECT boat_id, last_update_time FROM boats ORDER BY last_update_time DESC").fetchall()
+        boats = conn.execute("SELECT boat_id, boat_name, last_update_time FROM boats ORDER BY last_update_time DESC").fetchall()
         return [dict(row) for row in boats]
     except sqlite3.Error as e:
         logging.error(f"查询所有船只失败: {e}", exc_info=True)
@@ -457,6 +458,18 @@ async def get_fishing_zones():
         return FileResponse(geojson_path, media_type="application/json")
     logging.error(f"GeoJSON 文件未找到: {geojson_path}")
     return JSONResponse(status_code=404, content={"error": "GeoJSON file not found"})
+
+@fastapi_app.get("/api/config")
+async def get_config():
+    """
+    V4.5 新增: 提供前端所需的配置参数。
+    """
+    # `config` 是在服务器启动时加载的全局变量
+    if config:
+        return JSONResponse(content=config)
+    else:
+        logging.error("请求配置失败: 全局配置 'config' 未加载。")
+        raise HTTPException(status_code=500, detail="服务器配置未加载")
 
 # =============================================================================
 # WebSocket 事件处理

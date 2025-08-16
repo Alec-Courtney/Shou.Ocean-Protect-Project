@@ -28,5 +28,9 @@
   "logging": {
     "comment": "日志系统配置。level可以是 DEBUG, INFO, WARNING, ERROR, CRITICAL",
     "level": "INFO"
+  },
+  "frontend_parameters": {
+    "offline_timeout_seconds_comment": "【V4.4新增】在前端船只列表中，超过多少秒未收到数据更新的船只被视为离线（不显示）",
+    "offline_timeout_seconds": 600
   }
 }

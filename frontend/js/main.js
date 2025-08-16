@@ -45,7 +45,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const rightSidebar = document.getElementById('right-sidebar');
     // 修正：切换按钮现在是body的直接子元素
     const leftSidebarToggle = document.getElementById('left-sidebar-toggle');
-    const rightSidebarToggle = document.getElementById('right-sidebar-toggle');
+    // const rightSidebarToggle = document.getElementById('right-sidebar-toggle'); // 不再需要
+
+    // 预警弹窗容器
+    const warningContainer = document.getElementById('warning-container');
+    const warningSound = document.getElementById('warning-sound'); // 新增：预警声音元素
 
 
     // 地图和通信核心对象 (V4.0)
@@ -53,9 +57,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let fishingZonesLayer = null;
     let socket = null;
     let canvasRenderer = null; // Canvas渲染器实例
+    let config = {}; // V4.4 新增：用于存储从后端获取的配置
 
     // 多船数据管理
-    const boatsData = {}; // key: boat_id, value: { marker, historyPolyline, predictionPolyline, label, ... }
+    const boatsData = {}; // key: boat_id, value: { marker, historyPolyline, predictionPolyline, label, last_update, ... }
+    const allBoatsInfo = {}; // V4.4 新增：用于存储所有船只的静态信息 (ID和名称)
     let selectedBoatId = null;
     let historyDisplayLayer = L.layerGroup(); // 用于显示历史查询结果的图层组
     let showLabels = false; // 控制是否显示船只标签的全局变量
@@ -106,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             noWrap: true // 禁止地图在水平方向上重复平铺，避免世界地图重复显示
         }).addTo(map);
 
+        fetchConfig(); // V4.5 新增：加载后端配置
         fetchFishingZones(); // 地图初始化后立即加载渔区数据
     }
 
@@ -144,6 +151,32 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("无法加载渔区数据:", error);
             statusText.textContent = "错误: 无法加载渔区数据，请检查后端服务和GeoJSON文件。";
+        }
+    }
+
+    /**
+     * V4.5 新增：从后端API异步获取配置数据。
+     * 这些配置将用于控制前端行为，例如船只离线超时时间。
+     */
+    async function fetchConfig() {
+        try {
+            const response = await fetch('http://localhost:8000/api/config');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            config = await response.json();
+            
+            // 启动一个定时器，定期刷新船只列表以检查离线状态
+            setInterval(updateBoatList, 5000); // 每5秒刷新一次
+
+        } catch (error) {
+            console.error("无法加载配置文件:", error);
+            // 使用默认值以保证基本功能可用
+            config = {
+                frontend_parameters: {
+                    offline_timeout_seconds: 60
+                }
+            };
         }
     }
 
@@ -267,7 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {object} initialData - 包含初始经纬度 `latLng` 和预警等级 `warning_level` 的对象。
      */
     function updateBoatData(data) {
-        const { boat_id, lat, lon, bearing_deg, warning_level, prediction_path } = data;
+        const { boat_id, boat_name, lat, lon, bearing_deg, warning_level, prediction_path, timestamp } = data;
         const latLng = [lat, lon]; // Leaflet 接受 [latitude, longitude] 格式
 
         // 步骤 1: 检查船只图层是否存在于 `boatsData` 中，如果不存在则为新船只创建所有图层。
@@ -277,15 +310,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 步骤 2: 获取现有图层对象并进行属性更新。
         const boat = boatsData[boat_id];
+        
+        // V4.5 新增：更新船只的最后通信时间戳
+        boat.last_update = Date.now();
 
         // 2.1 更新船只 Marker (图标) 的位置
         boat.marker.setLatLng(latLng);
 
-        // 2.2 仅在预警等级发生变化时才更新图标，避免不必要的DOM操作和重绘
+        // 2.2 仅在预警等级发生变化时才更新图标和触发弹窗
         if (boat.warning_level !== warning_level) {
-            boat.marker.setIcon(warningIcons[warning_level] || warningIcons[0]); // 根据预警等级设置图标
+            boat.marker.setIcon(warningIcons[warning_level] || warningIcons[0]); // 更新图标
+
+            // 当预警等级发生变化且大于0时，触发弹窗逻辑
+            if (warning_level > 0) {
+                // 创建并显示新的预警项
+                showWarning({
+                    level: warning_level,
+                    name: boat_name || '未知船只',
+                    id: boat_id,
+                    time: new Date(timestamp).toLocaleString(),
+                    lon: lon,
+                    lat: lat
+                });
+            }
+            // 注意：预警解除时 (warning_level变为0)，我们不主动移除弹窗，让它自然被新的弹窗顶替掉
+
             boat.warning_level = warning_level; // 更新缓存中的预警等级
-            updateBoatList(); // 预警等级变化时，更新UI列表中的船只图标
+            updateBoatList(); // 更新UI列表中的船只图标
         }
 
         // 2.3 更新船只标签的位置和可见性
@@ -305,10 +356,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         boat.historyPolyline.setLatLngs(boat.historyPath); // 更新折线几何
 
-        // 2.5 更新预测轨迹线 (predictionPolyline)
-        // 后端返回的 prediction_path 是 [lon, lat] 格式，需要转换为 Leaflet 的 [lat, lon]
+        // 2.5 更新预测轨迹线 (predictionPolyline) - 方案A改造
+        // 实现离船只越远，轨迹越透明的效果
+        boat.predictionPolyline.clearLayers(); // 清空旧的预测线段
         const leafletPath = prediction_path.map(p => [p[1], p[0]]);
-        boat.predictionPolyline.setLatLngs(leafletPath); // 更新折线几何
+        
+        if (leafletPath.length > 1) {
+            const totalSegments = leafletPath.length - 1;
+            for (let i = 0; i < totalSegments; i++) {
+                // 计算当前线段的透明度，从不透明 (1.0) 递减到接近透明 (例如 0.2)
+                const opacity = 1.0 - (i / totalSegments) * 0.8;
+                
+                const segment = [leafletPath[i], leafletPath[i+1]];
+                L.polyline(segment, {
+                    color: '#ff4500',   // 橙红色
+                    weight: 3,
+                    dashArray: '5, 10',
+                    opacity: opacity,   // 应用动态计算的透明度
+                    renderer: canvasRenderer
+                }).addTo(boat.predictionPolyline);
+            }
+        }
 
         // 2.6 如果当前船只是选中状态且“锁定视角”复选框被选中，则移动地图中心到当前船只位置
         if (boat_id === selectedBoatId && lockViewCheckbox.checked) {
@@ -353,12 +421,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 opacity: 0.8,       // 透明度
                 renderer: canvasRenderer // 使用Canvas渲染器
             }),
-            predictionPolyline: L.polyline([], { 
-                color: '#ff4500',   // 橙红色
-                weight: 3,          // 粗细
-                dashArray: '5, 10', // 虚线样式
-                renderer: canvasRenderer // 使用Canvas渲染器
-            }),
+            // 方案A改造：预测轨迹不再是单一折线，而是一个图层组，用于容纳多个不同透明度的线段
+            predictionPolyline: L.layerGroup(),
             label: L.marker(latLng, {
                 icon: L.divIcon({
                     className: 'boat-label', // CSS 类名
@@ -395,12 +459,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const boats = await response.json();
+            // 清空并填充 allBoatsInfo 对象
+            Object.keys(allBoatsInfo).forEach(key => delete allBoatsInfo[key]);
+            boats.forEach(b => {
+                allBoatsInfo[b.boat_id] = { boat_name: b.boat_name || b.boat_id };
+            });
+
             // 保留“所有船只”和“请选择船只”选项
             historyBoatSelect.innerHTML = '<option value="all_boats">-- 所有船只 --</option><option value="">-- 请选择船只 --</option>';
             boats.forEach(b => {
                 const option = document.createElement('option');
                 option.value = b.boat_id;
-                option.textContent = b.boat_id;
+                // 下拉列表中显示船只名称，如果名称不存在则显示ID
+                option.textContent = b.boat_name || b.boat_id;
                 historyBoatSelect.appendChild(option);
             });
         } catch (error) {
@@ -439,10 +510,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const boats = await response.json();
             // 遍历从后端获取的船只列表
             boats.forEach(b => {
-                // 如果本地 `boatsData` 中没有该船只的数据，则创建一个占位符。
-                // 此时无法获取实时的 `warning_level`，暂时设为0。
+                // 如果本地 `boatsData` 中没有该船只的数据，则创建一个包含最后更新时间的对象。
                 if (!boatsData[b.boat_id]) {
-                    boatsData[b.boat_id] = { marker: null, warning_level: 0 }; 
+                    boatsData[b.boat_id] = { 
+                        marker: null, 
+                        warning_level: 0,
+                        // V4.5 修正：将API返回的ISO格式时间字符串转换为毫秒时间戳
+                        last_update: new Date(b.last_update_time).getTime() 
+                    };
                 }
             });
             updateBoatList(); // 更新UI上的船只列表
@@ -459,8 +534,22 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function updateBoatList() {
         boatList.innerHTML = ''; // 清空当前的船只列表
-        // 遍历 `boatsData` 中所有船只的ID
-        Object.keys(boatsData).forEach(boat_id => {
+        const now = Date.now();
+        const offlineTimeout = (config.frontend_parameters?.offline_timeout_seconds || 60) * 1000;
+
+        // V4.5 修改：只显示在线的船只
+        const onlineBoats = Object.keys(boatsData).filter(boat_id => {
+            const boat = boatsData[boat_id];
+            // V4.5 修正：船只必须有 last_update 时间戳，并且该时间戳在超时范围内，才视为在线
+            return boat.last_update && (now - boat.last_update < offlineTimeout);
+        });
+
+        if (onlineBoats.length === 0) {
+            boatList.innerHTML = '<li>没有在线的船只</li>';
+            return;
+        }
+
+        onlineBoats.forEach(boat_id => {
             const li = document.createElement('li'); // 创建新的列表项
             li.dataset.boatId = boat_id; // 将船只ID存储在data属性中
             // 如果当前列表项对应的船只是选中状态，则添加 'selected' 类
@@ -478,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusImg = document.createElement('img');
             statusImg.classList.add('boat-status-icon');
             // 获取船只的预警等级，如果不存在则默认为0级
-            const warningLevel = boatsData[boat_id] && boatsData[boat_id].warning_level !== undefined ? boatsData[boat_id].warning_level : 0; 
+            const warningLevel = boatsData[boat_id] && boatsData[boat_id].warning_level !== undefined ? boatsData[boat_id].warning_level : 0;
             statusImg.src = `../Toolbox/icons/warning_sign${warningLevel}.png`; // 设置图标路径
             statusImg.alt = `Warning Level ${warningLevel}`; // 设置alt文本
             li.appendChild(statusImg);
@@ -501,18 +590,16 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedBoatId = boat_id; // 更新当前选中船只的ID
         updateBoatList(); // 重新渲染船只列表，以高亮显示新选中的船只
 
-        // 遍历所有船只，根据选中状态显示或隐藏其历史轨迹和预测轨迹
+        // 遍历所有船只，根据选中状态显示或隐藏其预测轨迹
         Object.keys(boatsData).forEach(id => {
             const b = boatsData[id];
             // 确保船只对象和其轨迹图层存在
-            if (b && b.historyPolyline && b.predictionPolyline) {
+            if (b && b.predictionPolyline) {
                 if (id === selectedBoatId) {
-                    // 如果是选中的船只，将其轨迹图层添加到地图
-                    map.addLayer(b.historyPolyline);
+                    // 如果是选中的船只，将其预测轨迹图层添加到地图
                     map.addLayer(b.predictionPolyline);
                 } else {
-                    // 如果不是选中的船只，将其轨迹图层从地图移除
-                    map.removeLayer(b.historyPolyline);
+                    // 如果不是选中的船只，将其预测轨迹图层从地图移除
                     map.removeLayer(b.predictionPolyline);
                 }
             }
@@ -586,16 +673,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log("没有找到历史轨迹数据。");
                 }
 
-                // 4. 使用预警等级图标来绘制历史预警点
-                warningsData.forEach(w => {
-                    L.marker([w.latitude, w.longitude], {
-                        icon: warningIcons[w.warning_level] || warningIcons[0]
-                    }).bindPopup(`<b>预警等级: ${w.warning_level}</b><br>${new Date(w.timestamp).toLocaleString()}`)
-                      .addTo(historyDisplayLayer);
-                });
+                // 4. 历史预警点已根据要求取消在地图上绘制。
 
                 historyDisplayLayer.addTo(map); // 将包含历史轨迹和预警点的图层组添加到地图
-                updateWarningList(warningsData); // 更新预警信息列表
+                updateWarningList(warningsData, selectedHistoryBoatId); // 更新预警信息列表
 
                 // 如果有历史轨迹数据，将地图视图缩放到整个历史轨迹的范围
                 if (historyPath.length > 0) {
@@ -621,8 +702,9 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * 更新预警信息列表。
      * @param {Array} warnings - 预警数据数组。
+     * @param {string | null} boatIdForHistory - (可选) 当查询单个船只历史时，传入其ID。
      */
-    function updateWarningList(warnings) {
+    function updateWarningList(warnings, boatIdForHistory = null) {
         warningList.innerHTML = ''; // 清空列表
         if (warnings.length === 0) {
             const li = document.createElement('li');
@@ -633,9 +715,28 @@ document.addEventListener('DOMContentLoaded', () => {
         warnings.forEach(w => {
             const li = document.createElement('li');
             const time = new Date(w.timestamp).toLocaleString();
-            // 如果是查询所有警报，需要显示船只ID
-            const boatIdDisplay = w.boat_id ? `<strong>船只ID:</strong> ${w.boat_id} <br>` : '';
-            li.innerHTML = `${boatIdDisplay}<strong>时间:</strong> ${time} <br> <strong>等级:</strong> ${w.warning_level}`;
+            const boatId = w.boat_id || boatIdForHistory;
+            const boatName = allBoatsInfo[boatId]?.boat_name || '未知船只';
+
+            // 获取颜色
+            const levelColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${w.warning_level}-bg`).trim();
+            const levelTextColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${w.warning_level}-text`).trim();
+
+            li.innerHTML = `
+                <div class="warning-popup">
+                    <div class="warning-popup-level" style="background-color: ${levelColor}; color: ${levelTextColor};">
+                        <span>${w.warning_level}</span>
+                    </div>
+                    <div class="warning-popup-info">
+                        <div class="boat-info">
+                            <span class="boat-name">${boatName}</span>
+                            <span class="boat-id">${boatId}</span>
+                        </div>
+                        <div class="time-info">${time}</div>
+                        <div class="location-info">经度: ${w.longitude.toFixed(5)}, 纬度: ${w.latitude.toFixed(5)}</div>
+                    </div>
+                </div>
+            `;
             warningList.appendChild(li);
         });
     }
@@ -660,16 +761,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    rightSidebarToggle.addEventListener('click', () => {
-        rightSidebar.classList.toggle('is-expanded');
-        if (rightSidebar.classList.contains('is-expanded')) {
-            rightSidebarToggle.style.right = rightSidebar.offsetWidth + 'px'; // 移动到侧边栏左边缘
-            rightSidebarToggle.textContent = '<';
-        } else {
-            rightSidebarToggle.style.right = '0'; // 移回屏幕右边缘
-            rightSidebarToggle.textContent = '>';
-        }
-    });
+    // 右侧侧边栏切换逻辑已移除
 
 
     // 切换标签显示事件
@@ -686,4 +778,56 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    /**
+     * 创建并显示一个新的预警弹窗项。
+     * @param {object} data - 包含预警信息的对象。
+     */
+    function showWarning(data) {
+        const { level, name, id, time, lon, lat } = data;
+
+        // 1. 创建新的弹窗元素
+        const warningEl = document.createElement('div');
+        warningEl.className = 'warning-popup';
+
+        // 2. 获取颜色
+        const levelColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${level}-bg`).trim();
+        const levelTextColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${level}-text`).trim();
+
+        // 3. 填充内容
+        warningEl.innerHTML = `
+            <div class="warning-popup-level" style="background-color: ${levelColor}; color: ${levelTextColor};">
+                <span>${level}</span>
+            </div>
+            <div class="warning-popup-info">
+                <div class="boat-info">
+                    <span class="boat-name">${name}</span>
+                    <span class="boat-id">${id}</span>
+                </div>
+                <div class="time-info">${time}</div>
+                <div class="location-info">经度: ${lon.toFixed(5)}, 纬度: ${lat.toFixed(5)}</div>
+            </div>
+        `;
+
+        // 4. 将新弹窗添加到容器顶部
+        warningContainer.prepend(warningEl);
+
+        // 5. 限制最大显示数量，例如最多显示5个
+        const maxWarnings = 5;
+        while (warningContainer.children.length > maxWarnings) {
+            warningContainer.removeChild(warningContainer.lastChild);
+        }
+
+        // 新增功能：播放提示音
+        if (warningSound) {
+            warningSound.play().catch(error => console.error("音频播放失败: 请确保 'frontend/sounds/warning.mp3' 文件存在。", error));
+        }
+
+        // 新增功能：平滑移动地图视角到预警船只
+        const targetLatLng = [lat, lon];
+        map.flyTo(targetLatLng, 12, { // 飞到目标坐标，缩放级别设为12
+            animate: true,
+            duration: 1.5 // 动画持续时间1.5秒
+        });
+    }
 });

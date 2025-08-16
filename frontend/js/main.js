@@ -40,6 +40,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // 新增：历史查询相关元素
     const historyBoatSelect = document.getElementById('history-boat-select');
 
+    // 预警统计面板元素
+    const statsTitle = document.getElementById('stats-title');
+    const statsCount = document.getElementById('stats-count');
+
     // 新增：侧边栏元素
     const leftSidebar = document.getElementById('left-sidebar');
     const rightSidebar = document.getElementById('right-sidebar');
@@ -106,10 +110,10 @@ document.addEventListener('DOMContentLoaded', () => {
             worldCopyJump: true // 允许在平移越过180度经线时，地图和标记物能无缝跳转
         }).setView([22.5, 114.0], 8); // 默认视图中心 (例如：珠江口附近)
 
-        // 添加OpenStreetMap瓦片图层作为底图
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            noWrap: true // 禁止地图在水平方向上重复平铺，避免世界地图重复显示
+        // 使用 Esri World Imagery 卫星图层作为底图
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+            noWrap: true
         }).addTo(map);
 
         fetchConfig(); // V4.5 新增：加载后端配置
@@ -249,12 +253,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // 监听 'connect' 事件，表示成功连接到WebSocket服务器
-        socket.on('connect', () => {
+        socket.on('connect', async () => { // V4.8 修复：改为 async 函数
             console.log('成功连接到WebSocket服务器');
             statusText.textContent = '已连接';
             statusText.style.color = 'green';
             fetchBoatList(); // 连接成功后，立即从后端获取初始实时船只列表
-            fetchHistoryBoats(); // 连接成功后，获取历史查询的船只列表
+            
+            // V4.8 修复：确保先获取船只名称缓存，再获取当天预警列表
+            await fetchHistoryBoats(); // 等待船只信息加载完成
+            fetchTodayWarnings();      // 然后再获取和渲染预警列表
         });
 
         // 监听 'disconnect' 事件，表示与WebSocket服务器断开连接
@@ -628,8 +635,9 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     async function queryHistory() {
         const selectedHistoryBoatId = historyBoatSelect.value;
-        const startTime = startTimeInput.value;
-        const endTime = endTimeInput.value;
+        // 修复：将本地时间转换为ISO格式字符串，并确保包含秒
+        const startTime = startTimeInput.value ? new Date(startTimeInput.value + ':00').toISOString() : null;
+        const endTime = endTimeInput.value ? new Date(endTimeInput.value + ':00').toISOString() : null;
 
         if (!startTime || !endTime) {
             alert("请输入开始和结束时间！");
@@ -665,6 +673,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 const warningsData = await warningsResponse.json();
 
+                // 更新统计面板
+                statsTitle.textContent = '当前查询预警数';
+                statsCount.textContent = warningsData.length;
+
                 // 3. 绘制历史轨迹线
                 const historyPath = historyData.map(p => [p.latitude, p.longitude]);
                 if (historyPath.length > 0) {
@@ -673,7 +685,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log("没有找到历史轨迹数据。");
                 }
 
-                // 4. 历史预警点已根据要求取消在地图上绘制。
+                // 4. 恢复功能：在地图上绘制历史预警点
+                warningsData.forEach(w => {
+                    const warningLatLng = [w.latitude, w.longitude];
+                    const warningIcon = warningIcons[w.warning_level] || warningIcons[0];
+                    L.marker(warningLatLng, { icon: warningIcon })
+                        .bindPopup(`<b>预警等级: ${w.warning_level}</b><br>时间: ${new Date(w.timestamp).toLocaleString()}<br>经度: ${w.longitude.toFixed(6)}<br>纬度: ${w.latitude.toFixed(6)}`)
+                        .addTo(historyDisplayLayer);
+                });
 
                 historyDisplayLayer.addTo(map); // 将包含历史轨迹和预警点的图层组添加到地图
                 updateWarningList(warningsData, selectedHistoryBoatId); // 更新预警信息列表
@@ -697,6 +716,43 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearHistory() {
         historyDisplayLayer.clearLayers();
         warningList.innerHTML = ''; // 清空预警信息列表
+        updateTodayWarningCount(); // 恢复显示当天预警总数
+        fetchTodayWarnings(); // V4.7 新增：恢复显示当天预警列表
+    }
+
+    /**
+     * V4.6 新增：获取并更新当天的预警总数。
+     */
+    async function updateTodayWarningCount() {
+        try {
+            const response = await fetch('http://localhost:8000/api/warnings/today_count');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            statsTitle.textContent = '当日预警总数';
+            statsCount.textContent = data.count;
+        } catch (error) {
+            console.error("无法获取当天预警总数:", error);
+            statsCount.textContent = '错误';
+        }
+    }
+
+    /**
+     * V4.7 新增：获取并显示当天的预警列表。
+     */
+    async function fetchTodayWarnings() {
+        try {
+            const response = await fetch('http://localhost:8000/api/warnings/today');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const warnings = await response.json();
+            updateWarningList(warnings);
+        } catch (error) {
+            console.error("无法获取当天预警列表:", error);
+            warningList.innerHTML = '<li>无法加载当天预警</li>';
+        }
     }
 
     /**
@@ -733,7 +789,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="boat-id">${boatId}</span>
                         </div>
                         <div class="time-info">${time}</div>
-                        <div class="location-info">经度: ${w.longitude.toFixed(5)}, 纬度: ${w.latitude.toFixed(5)}</div>
+                        <div class="location-info">经度: ${w.longitude.toFixed(6)}, 纬度: ${w.latitude.toFixed(6)}</div>
                     </div>
                 </div>
             `;
@@ -746,6 +802,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     initMap();
     connectToBackend();
+    updateTodayWarningCount(); // 页面加载时获取当天预警总数
+    // V4.8 修复：移除此处的调用，已移至 'connect' 事件回调中，以避免竞态条件
     queryHistoryBtn.addEventListener('click', queryHistory);
     clearHistoryBtn.addEventListener('click', clearHistory);
 
@@ -805,7 +863,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="boat-id">${id}</span>
                 </div>
                 <div class="time-info">${time}</div>
-                <div class="location-info">经度: ${lon.toFixed(5)}, 纬度: ${lat.toFixed(5)}</div>
+                <div class="location-info">经度: ${lon.toFixed(6)}, 纬度: ${lat.toFixed(6)}</div>
             </div>
         `;
 

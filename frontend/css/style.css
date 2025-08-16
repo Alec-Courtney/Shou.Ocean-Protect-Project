@@ -33,8 +33,8 @@ body, html {
 
 #map {
     height: 100%;
-    width: calc(100% - 280px); /* 为右侧边栏留出空间 */
-    margin-right: 280px; /* 右侧边栏的宽度 */
+    width: calc(100% - 350px); /* 为右侧边栏留出空间 */
+    margin-right: 350px; /* 右侧边栏的宽度 */
 }
 
 /* --- 新增：侧边栏样式 --- */
@@ -66,7 +66,7 @@ body, html {
 
 #right-sidebar {
     right: 0;
-    width: 280px; /* 优化宽度 */
+    width: 350px; /* 优化宽度 */
     /* 移除 transform 以固定侧边栏 */
 }
 
@@ -329,6 +329,12 @@ body, html {
     transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
+#status-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 创建两列，每列占据可用空间的一半 */
+    gap: 0 20px; /* 设置列间距，行间距为0 */
+}
+
 #status-content .status-item {
     display: flex;
     justify-content: space-between;
@@ -541,4 +547,98 @@ body, html {
 .warning-popup-info .location-info {
     font-size: 12px; /* 缩小字体 */
     font-weight: 500;
+}
+
+/* --- 预警统计面板 --- */
+#warning-stats-panel #stats-content {
+    text-align: center;
+    padding: 10px 0;
+}
+
+#warning-stats-panel #stats-title {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+#warning-stats-panel #stats-count {
+    margin: 0;
+    font-size: 48px;
+    font-weight: bold;
+    color: var(--primary-accent);
+}
+
+/* --- 预警等级说明图标 --- */
+.panel h2 {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* 确保标题和图标都居中 */
+    position: relative; /* 为工具提示的绝对定位提供基准 */
+}
+
+.info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    color: var(--text-muted);
+    font-weight: bold;
+    font-size: 12px;
+    margin-left: 8px;
+    cursor: pointer;
+    position: relative; /* 使得tooltip可以相对于它定位 */
+    user-select: none; /* 防止文本被选中 */
+}
+
+.info-icon .tooltip {
+    visibility: hidden;
+    opacity: 0;
+    width: 320px; /* 增加宽度以容纳内容 */
+    background-color: #343a40;
+    color: #fff;
+    text-align: left;
+    border-radius: 6px;
+    padding: 15px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%; /* 定位在图标上方 */
+    left: 50%;
+    margin-left: -160px; /* 宽度的一半，使其居中 */
+    transition: opacity 0.3s;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    font-size: 13px; /* 调整字体大小 */
+    line-height: 1.6; /* 增加行高 */
+}
+
+.info-icon:hover .tooltip {
+    visibility: visible;
+    opacity: 1;
+}
+
+.info-icon .tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #343a40 transparent transparent transparent;
+}
+
+.info-icon .tooltip p {
+    margin: 0 0 8px 0; /* 调整段落间距 */
+    font-weight: normal; /* 重置字体权重 */
+}
+
+.info-icon .tooltip p:last-child {
+    margin-bottom: 0;
+}
+
+.info-icon .tooltip strong {
+    color: #ffc107; /* 标题使用醒目的颜色 */
 }

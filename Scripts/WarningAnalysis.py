@@ -92,11 +92,12 @@ def analyze_realtime_point(point_data: dict, fishing_zones_geojson_path: str, co
 
     返回:
         tuple[int, list[list[float]]]: 包含 (预警等级, 预测路径点列表) 的元组。
-               预警等级:
+               预警等级 (V4.5 New Logic):
                    -1: 错误 (例如文件未找到或坐标无效)。
                     0: 无预警 (船只在渔区内且预测轨迹不越界)。
-                    1: 最高等级预警。这通常表示船只当前已在渔区外，或预测其在配置的最短时间内即将越界。
-                    2, 3, ...: 其他等级的预测性预警，具体等级和时间由 `config.json` 文件定义。
+                    1: 最高等级预警 - 【已越界】。船只当前已在渔区外。
+                    2: 次高等级预警 - 【即将越界】。根据配置中`warning_levels_seconds`的最短时间预测。
+                    3: 普通预测预警 - 【越界风险】。根据配置中`warning_levels_seconds`的较长时间预测。
                预测路径: 一个包含 `[lon, lat]` 坐标对的列表，表示从当前点开始的预测轨迹。
     """
     global zones_gdf_cache, zones_path_cache, zones_spatial_index_cache
@@ -168,6 +169,7 @@ def analyze_realtime_point(point_data: dict, fishing_zones_geojson_path: str, co
         # 然后对筛选出的多边形进行精确的 `contains` 判断
         is_currently_inside = possible_matches.geometry.contains(point_geom).any()
 
+        # V4.5 新预警逻辑: "已越界" 是最高优先级，等级为 1
         if not is_currently_inside:
             # 如果当前点已在渔区界外，直接返回最高等级预警 (等级1)
             return 1, prediction_path
@@ -186,13 +188,13 @@ def analyze_realtime_point(point_data: dict, fishing_zones_geojson_path: str, co
             prediction_path.append([future_lon, future_lat])
 
         # 2. 检查预测性预警
-        #    正确逻辑：必须从最短预测时间（对应最紧急的预警等级）开始检查。
-        #    一旦发现预测点越界，就确定为该预警等级并立即停止检查。
-        #    这样才能确保总是返回最紧急（最优先）的预警级别。
-        #    例如，如果船只在 800 秒后越界，那么 900 秒的预测会触发1级预警，循环会终止，
-        #    不会错误地继续检查并返回一个更低优先级的预警。
+        #    V4.5 新预警逻辑:
+        #    - 等级1 已在函数开头处理 (is_currently_inside)。
+        #    - 这里处理预测性预警 (等级 2, 3, ...)。
+        #    - 逻辑保持不变：必须从最短预测时间（对应最紧急的预警等级）开始检查。
+        #    - 一旦发现预测点越界，就确定为该预警等级并立即停止检查。
         
-        # 按预警时间（秒数）从小到大排序
+        # 按预警时间（秒数）从小到大排序，以确保先检查最紧急的预测
         sorted_warning_levels = sorted(WARNING_LEVELS.items(), key=lambda item: item[1])
 
         for level, seconds in sorted_warning_levels:

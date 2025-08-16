@@ -38,6 +38,23 @@
             <button id="query-history-btn" class="action-btn">查询</button>
             <button id="clear-history-btn" class="action-btn">清除</button>
         </div>
+        <div id="warning-stats-panel" class="panel">
+            <h2>
+                预警统计
+                <span class="info-icon">?
+                    <div class="tooltip">
+                        <p><strong>等级 1 (最高): 已越界</strong><br>船只当前物理位置已在许可渔区之外。</p>
+                        <p><strong>等级 2 (次高): 即将越界</strong><br>根据较短时间预测，船只即将越界。</p>
+                        <p><strong>等级 3 (普通): 越界风险</strong><br>根据较长时间预测，船只存在越界风险。</p>
+                        <p><strong>等级 0: 安全</strong><br>无越界风险。</p>
+                    </div>
+                </span>
+            </h2>
+            <div id="stats-content">
+                <h3 id="stats-title">当日预警总数</h3>
+                <p id="stats-count">--</p>
+            </div>
+        </div>
         <div id="warning-list-panel" class="panel">
             <h2>预警信息列表</h2>
             <ul id="warning-list">
@@ -58,7 +75,7 @@
         <div id="boat-list-panel" class="panel">
             <h2>
                 <span>船只列表</span>
-                <button id="toggle-labels-btn" class="action-btn">显示标签</button>
+                <button id="toggle-labels-btn" class="action-btn">显示地图标签</button>
             </h2>
             <ul id="boat-list">
                 <!-- 船只列表将由JS动态填充 -->

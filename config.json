@@ -4,8 +4,7 @@
     "warning_deduplication_timeout_seconds": 600,
     "warning_levels_seconds_comment": "预警等级（键）以及对应的提前预警秒数（值）",
     "warning_levels_seconds": {
-      "1": 900,
-      "2": 1800,
+      "2": 900,
       "3": 3600
     },
     "knots_to_mps_conversion_comment": "速度单位从 '节' 转换为 '米/秒' 的转换因子",

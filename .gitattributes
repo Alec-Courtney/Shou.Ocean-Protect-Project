@@ -1,2 +1,0 @@
-frontend/data/fishing_zones.geojson filter=lfs diff=lfs merge=lfs -text
-Docs/Arc[[:space:]]GIS[[:space:]]data/eez_v11.shp filter=lfs diff=lfs merge=lfs -text

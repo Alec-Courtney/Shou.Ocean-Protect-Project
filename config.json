@@ -30,6 +30,8 @@
   },
   "frontend_parameters": {
     "offline_timeout_seconds_comment": "【V4.4新增】在前端船只列表中，超过多少秒未收到数据更新的船只被视为离线（不显示）",
-    "offline_timeout_seconds": 600
+    "offline_timeout_seconds": 600,
+    "websocket_send_interval_seconds_comment": "【V4.5新增】后端通过WebSocket向前端发送数据的最小时间间隔（秒），用于节流，防止前端卡顿",
+    "websocket_send_interval_seconds": 0.5
   }
 }

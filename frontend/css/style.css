@@ -52,12 +52,13 @@ body, html {
     padding: 10px; /* 减小内边距 */
     box-sizing: border-box;
     gap: 10px; /* 减小面板间距 */
-    overflow-y: auto;
+    /* overflow-y: auto; */ /* V4.7 移除: 将滚动控制权交给子元素 */
 }
 
 #left-sidebar {
     left: 0;
     transform: translateX(-100%);
+    overflow: hidden; /* V4.7 新增: 确保侧边栏本身不出现滚动条 */
 }
 
 #left-sidebar.is-expanded {
@@ -464,8 +465,10 @@ body, html {
 
 /* --- 预警信息列表面板 --- */
 #warning-list-panel {
-    /* max-height: 200px; */ /* 移除最大高度限制 */
-    overflow-y: auto;
+    flex-grow: 1; /* V4.7 新增: 占据所有剩余的垂直空间 */
+    overflow-y: auto; /* V4.7 修改: 允许此面板内部滚动 */
+    display: flex; /* V4.7 新增: 使用flex布局来管理其子元素 */
+    flex-direction: column; /* V4.7 新增: 垂直排列 */
 }
 
 #warning-list {

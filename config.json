@@ -16,7 +16,7 @@
   },
   "monitoring_parameters": {
     "default_fishing_zones_comment": "【需要您手动配置】可捕鱼区域的Shapefile文件路径",
-    "default_fishing_zones": "Docs/Arc GIS data/eez_v11.shp",
+    "default_fishing_zones": "resources/eez_v11_Erase.shp",
     "simplification_tolerance_comment": "【优化项】GeoJSON几何简化容差，值越大简化越多，文件越小。0表示不简化。",
     "simplification_tolerance": 0.001
   },

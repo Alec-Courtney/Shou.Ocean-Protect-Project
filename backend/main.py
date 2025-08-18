@@ -177,9 +177,15 @@ async def receive_gps_data(data: GPSData, background_tasks: BackgroundTasks):
 @fastapi_app.get("/api/fishing_zones")
 async def get_fishing_zones():
     geojson_path = os.path.join(project_root, 'frontend', 'data', 'fishing_zones.geojson')
-    if os.path.exists(geojson_path):
-        return FileResponse(geojson_path, media_type="application/json")
-    return JSONResponse(status_code=404, content={"error": "GeoJSON file not found"})
+    if not os.path.exists(geojson_path):
+        return JSONResponse(status_code=404, content={"error": "GeoJSON file not found"})
+    try:
+        with open(geojson_path, 'r', encoding='utf-8') as f:
+            geojson_data = json.load(f)
+        return JSONResponse(content=geojson_data)
+    except Exception as e:
+        logging.error(f"读取或解析GeoJSON文件时出错: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="无法处理渔区数据文件")
 
 @fastapi_app.get("/api/config")
 async def get_config():

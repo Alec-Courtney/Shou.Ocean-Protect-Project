@@ -70,26 +70,29 @@ document.addEventListener('DOMContentLoaded', () => {
     let historyDisplayLayer = L.layerGroup(); // 用于显示历史查询结果的图层组
     let showLabels = false; // 控制是否显示船只标签的全局变量
 
+    // V4.6 新增：用于跟踪当日预警总数的变量
+    let dailyWarningCount = 0;
+
     // 预加载不同预警等级的图标，避免重复创建
     const warningIcons = {
         0: L.icon({
             iconUrl: '../Toolbox/icons/warning_sign0.png',
-            iconSize: [32, 32],
+            iconSize: [28.8, 28.8],
             iconAnchor: [16, 16], // 图标锚点，设为中心
         }),
         1: L.icon({
             iconUrl: '../Toolbox/icons/warning_sign1.png',
-            iconSize: [32, 32],
+            iconSize: [28.8, 28.8],
             iconAnchor: [16, 16],
         }),
         2: L.icon({
             iconUrl: '../Toolbox/icons/warning_sign2.png',
-            iconSize: [32, 32],
+            iconSize: [28.8, 28.8],
             iconAnchor: [16, 16],
         }),
         3: L.icon({
             iconUrl: '../Toolbox/icons/warning_sign3.png',
-            iconSize: [32, 32],
+            iconSize: [28.8, 28.8],
             iconAnchor: [16, 16],
         })
     };
@@ -330,6 +333,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 当预警等级发生变化且大于0时，触发弹窗逻辑
             if (warning_level > 0) {
+                // V4.9: 增加当日预警计数
+                dailyWarningCount++;
+                statsCount.textContent = dailyWarningCount; // 更新统计面板显示
+                
                 // 创建并显示新的预警项
                 showWarning({
                     level: warning_level,
@@ -633,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * 查询并显示指定船只在特定时间范围内的历史轨迹和历史预警数据。
      * 数据从后端API获取，并在地图上绘制。
      */
-    async function queryHistory() {
+    function queryHistory() {
         const selectedHistoryBoatId = historyBoatSelect.value;
         // 修复：将本地时间转换为ISO格式字符串，并确保包含秒
         const startTime = startTimeInput.value ? new Date(startTimeInput.value + ':00').toISOString() : null;
@@ -651,56 +658,67 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (selectedHistoryBoatId === 'all_boats') {
                 // 查询所有警报
-                const allWarningsResponse = await fetch(`http://localhost:8000/api/all_warnings?start_time=${startTime}&end_time=${endTime}`);
-                if (!allWarningsResponse.ok) {
-                    throw new Error(`HTTP error! status: ${allWarningsResponse.status}`);
-                }
-                const allWarningsData = await allWarningsResponse.json();
-                updateWarningList(allWarningsData); // 只更新预警信息列表
+                const allWarningsResponse = fetch(`http://localhost:8000/api/all_warnings?start_time=${startTime}&end_time=${endTime}`);
+                allWarningsResponse.then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                }).then(allWarningsData => {
+                    updateWarningList(allWarningsData); // 只更新预警信息列表
+                    // V4.9: 更新当日预警总数，因为查询历史可能不影响当日总数，但为了UI一致性，我们不在这里更新它
+                    // statsTitle.textContent = '当前查询预警数';
+                    // statsCount.textContent = allWarningsData.length;
+                }).catch(error => {
+                    console.error("无法获取所有历史预警:", error);
+                    statusText.textContent = "错误: 无法获取所有历史预警";
+                });
             } else if (selectedHistoryBoatId) {
                 // 查询特定船只的历史数据
                 // 1. 获取历史轨迹数据
-                const historyResponse = await fetch(`http://localhost:8000/api/boats/${selectedHistoryBoatId}/history?start_time=${startTime}&end_time=${endTime}`);
-                if (!historyResponse.ok) {
-                    throw new Error(`HTTP error! status: ${historyResponse.status}`);
-                }
-                const historyData = await historyResponse.json();
-                
+                const historyResponse = fetch(`http://localhost:8000/api/boats/${selectedHistoryBoatId}/history?start_time=${startTime}&end_time=${endTime}`);
                 // 2. 获取历史预警数据
-                const warningsResponse = await fetch(`http://localhost:8000/api/boats/${selectedHistoryBoatId}/warnings?start_time=${startTime}&end_time=${endTime}`);
-                if (!warningsResponse.ok) {
-                    throw new Error(`HTTP error! status: ${warningsResponse.status}`);
-                }
-                const warningsData = await warningsResponse.json();
+                const warningsResponse = fetch(`http://localhost:8000/api/boats/${selectedHistoryBoatId}/warnings?start_time=${startTime}&end_time=${endTime}`);
 
-                // 更新统计面板
-                statsTitle.textContent = '当前查询预警数';
-                statsCount.textContent = warningsData.length;
+                Promise.all([historyResponse, warningsResponse])
+                    .then(responses => Promise.all(responses.map(res => {
+                        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                        return res.json();
+                    })))
+                    .then(([historyData, warningsData]) => {
+                        // 更新统计面板
+                        statsTitle.textContent = '当前查询预警数';
+                        statsCount.textContent = warningsData.length;
 
-                // 3. 绘制历史轨迹线
-                const historyPath = historyData.map(p => [p.latitude, p.longitude]);
-                if (historyPath.length > 0) {
-                    L.polyline(historyPath, { color: 'blue', weight: 3 }).addTo(historyDisplayLayer);
-                } else {
-                    console.log("没有找到历史轨迹数据。");
-                }
+                        // 3. 绘制历史轨迹线
+                        const historyPath = historyData.map(p => [p.latitude, p.longitude]);
+                        if (historyPath.length > 0) {
+                            L.polyline(historyPath, { color: 'blue', weight: 3 }).addTo(historyDisplayLayer);
+                        } else {
+                            console.log("没有找到历史轨迹数据。");
+                        }
 
-                // 4. 恢复功能：在地图上绘制历史预警点
-                warningsData.forEach(w => {
-                    const warningLatLng = [w.latitude, w.longitude];
-                    const warningIcon = warningIcons[w.warning_level] || warningIcons[0];
-                    L.marker(warningLatLng, { icon: warningIcon })
-                        .bindPopup(`<b>预警等级: ${w.warning_level}</b><br>时间: ${new Date(w.timestamp).toLocaleString()}<br>经度: ${w.longitude.toFixed(6)}<br>纬度: ${w.latitude.toFixed(6)}`)
-                        .addTo(historyDisplayLayer);
-                });
+                        // 4. 恢复功能：在地图上绘制历史预警点
+                        warningsData.forEach(w => {
+                            const warningLatLng = [w.latitude, w.longitude];
+                            const warningIcon = warningIcons[w.warning_level] || warningIcons[0];
+                            L.marker(warningLatLng, { icon: warningIcon })
+                                .bindPopup(`<b>预警等级: ${w.warning_level}</b><br>时间: ${new Date(w.timestamp).toLocaleString()}<br>经度: ${w.longitude.toFixed(6)}<br>纬度: ${w.latitude.toFixed(6)}`)
+                                .addTo(historyDisplayLayer);
+                        });
 
-                historyDisplayLayer.addTo(map); // 将包含历史轨迹和预警点的图层组添加到地图
-                updateWarningList(warningsData, selectedHistoryBoatId); // 更新预警信息列表
+                        historyDisplayLayer.addTo(map); // 将包含历史轨迹和预警点的图层组添加到地图
+                        updateWarningList(warningsData, selectedHistoryBoatId); // 更新预警信息列表
 
-                // 如果有历史轨迹数据，将地图视图缩放到整个历史轨迹的范围
-                if (historyPath.length > 0) {
-                    map.fitBounds(L.polyline(historyPath).getBounds());
-                }
+                        // 如果有历史轨迹数据，将地图视图缩放到整个历史轨迹的范围
+                        if (historyPath.length > 0) {
+                            map.fitBounds(L.polyline(historyPath).getBounds());
+                        }
+                    })
+                    .catch(error => {
+                        console.error("查询历史数据失败:", error);
+                        statusText.textContent = "错误: 查询历史数据失败";
+                    });
             } else {
                 alert("请选择一艘船或选择'所有船只'进行历史查询！");
             }
@@ -716,8 +734,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearHistory() {
         historyDisplayLayer.clearLayers();
         warningList.innerHTML = ''; // 清空预警信息列表
-        updateTodayWarningCount(); // 恢复显示当天预警总数
-        fetchTodayWarnings(); // V4.7 新增：恢复显示当天预警列表
+        // V4.9: 恢复显示当日预警总数和列表
+        updateTodayWarningCount(); 
+        fetchTodayWarnings(); 
     }
 
     /**
@@ -732,9 +751,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             statsTitle.textContent = '当日预警总数';
             statsCount.textContent = data.count;
+            // V4.9: 初始化 dailyWarningCount
+            dailyWarningCount = data.count;
         } catch (error) {
             console.error("无法获取当天预警总数:", error);
             statsCount.textContent = '错误';
+            dailyWarningCount = 0; // 发生错误时重置计数
         }
     }
 

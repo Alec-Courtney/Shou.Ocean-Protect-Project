@@ -97,12 +97,12 @@ class AppController(tk.Tk):
         self.server_url_var = tk.StringVar(value="http://localhost:8000/api/gps_data")
         ttk.Entry(conn_frame, textvariable=self.server_url_var, width=30).grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(conn_frame, text="船只ID:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.boat_id_var = tk.StringVar(value="BOAT-001")
+        ttk.Label(conn_frame, text="MMSI:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.boat_id_var = tk.StringVar(value="412333807")
         ttk.Entry(conn_frame, textvariable=self.boat_id_var, width=15).grid(row=1, column=1, padx=5, pady=5)
 
         ttk.Label(conn_frame, text="船只名称:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        self.boat_name_var = tk.StringVar(value="My Test Boat")
+        self.boat_name_var = tk.StringVar(value="风帆动力航行")
         ttk.Entry(conn_frame, textvariable=self.boat_name_var, width=15).grid(row=2, column=1, padx=5, pady=5)
 
         ttk.Label(conn_frame, text="发送间隔 (秒):").grid(row=3, column=0, padx=5, pady=5, sticky="w")

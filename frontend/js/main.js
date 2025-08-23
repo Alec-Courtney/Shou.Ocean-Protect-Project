@@ -321,11 +321,15 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {object} initialData - 包含初始经纬度 `latLng` 和预警等级 `warning_level` 的对象。
      */
     function updateBoatData(data) {
-        const { boat_id, boat_name, lat, lon, bearing_deg, warning_level, prediction_path, timestamp } = data;
+        let { boat_id, boat_name, lat, lon, bearing_deg, warning_level, prediction_path, timestamp } = data;
+        boat_id = boat_id.trim(); // 清理 boat_id 中的空白字符，特别是换行符
         const latLng = [lat, lon]; // Leaflet 接受 [latitude, longitude] 格式
+
+        console.log(`收到船只 ${boat_id} 的GPS更新:`, data); // 添加日志，用于调试
 
         // 步骤 1: 检查船只图层是否存在于 `boatsData` 中，如果不存在则为新船只创建所有图层。
         if (!boatsData[boat_id] || !boatsData[boat_id].marker) {
+            console.log(`为新船只 ${boat_id} 创建图层`); // 添加日志
             createBoatLayers(boat_id, { latLng, warning_level });
         }
 

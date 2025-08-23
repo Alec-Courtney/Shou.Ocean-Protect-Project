@@ -260,10 +260,9 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('成功连接到WebSocket服务器');
             statusText.textContent = '已连接';
             statusText.style.color = 'green';
-            fetchBoatList(); // 连接成功后，立即从后端获取初始实时船只列表
-            
-            // V4.8 修复：确保先获取船只名称缓存，再获取当天预警列表
-            await fetchHistoryBoats(); // 等待船只信息加载完成
+            // 确保先获取所有船只的名称缓存，再获取初始实时船只列表和当天预警列表
+            await fetchHistoryBoats(); // 等待船只信息加载完成，填充 allBoatsInfo
+            fetchBoatList();           // 然后获取初始实时船只列表
             fetchTodayWarnings();      // 然后再获取和渲染预警列表
         });
 
@@ -492,19 +491,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const boats = await response.json();
+            console.log("从后端获取的船只列表:", boats); // 添加日志
             // 清空并填充 allBoatsInfo 对象
             Object.keys(allBoatsInfo).forEach(key => delete allBoatsInfo[key]);
             boats.forEach(b => {
-                allBoatsInfo[b.boat_id] = { boat_name: b.boat_name || b.boat_id };
+                // 确保 boat_id 在存储前也被清理
+                const cleanedBoatId = b.boat_id.trim();
+                allBoatsInfo[cleanedBoatId] = { boat_name: b.boat_name || cleanedBoatId };
             });
+            console.log("填充后的 allBoatsInfo:", allBoatsInfo); // 添加日志
 
             // 保留“所有船只”和“请选择船只”选项
             historyBoatSelect.innerHTML = '<option value="all_boats">-- 所有船只 --</option><option value="">-- 请选择船只 --</option>';
             boats.forEach(b => {
                 const option = document.createElement('option');
                 option.value = b.boat_id;
-                // 下拉列表中显示船只名称，如果名称不存在则显示ID
-                option.textContent = b.boat_name || b.boat_id;
+                // 下拉列表中显示船只ID
+                option.textContent = b.boat_id;
                 historyBoatSelect.appendChild(option);
             });
         } catch (error) {
@@ -543,9 +546,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const boats = await response.json();
             // 遍历从后端获取的船只列表
             boats.forEach(b => {
+                const cleanedBoatId = b.boat_id.trim(); // 清理 boat_id
                 // 如果本地 `boatsData` 中没有该船只的数据，则创建一个包含最后更新时间的对象。
-                if (!boatsData[b.boat_id]) {
-                    boatsData[b.boat_id] = { 
+                if (!boatsData[cleanedBoatId]) {
+                    boatsData[cleanedBoatId] = { 
                         marker: null, 
                         warning_level: 0,
                         // V4.5 修正：将API返回的ISO格式时间字符串转换为毫秒时间戳
@@ -812,7 +816,7 @@ document.addEventListener('DOMContentLoaded', () => {
         warnings.forEach(w => {
             const li = document.createElement('li');
             const time = new Date(w.timestamp).toLocaleString();
-            const boatId = w.boat_id || boatIdForHistory;
+            const boatId = (w.boat_id || boatIdForHistory).trim(); // 确保 boatId 被清理
             const boatName = allBoatsInfo[boatId]?.boat_name || '未知船只';
 
             // 获取颜色

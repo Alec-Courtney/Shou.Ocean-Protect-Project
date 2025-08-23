@@ -10,7 +10,7 @@ import time
 import logging
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, date
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -145,6 +145,27 @@ async def process_gps_data_background(data: GPSData):
                         (data.boat_id, data.timestamp, warning_level, data.latitude, data.longitude, f"预测路径: {prediction_path}")
                     )
                     conn.commit()
+
+                    # --- 新增逻辑开始 ---
+                    # 查询当天预警总数
+                    today = date.today()
+                    start_of_day = datetime.combine(today, datetime.min.time())
+                    end_of_day = datetime.combine(today, datetime.max.time())
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """
+                        SELECT COUNT(*) 
+                        FROM warnings 
+                        WHERE timestamp BETWEEN ? AND ?
+                        """,
+                        (start_of_day, end_of_day)
+                    )
+                    count = cursor.fetchone()[0]
+                    # 推送总数更新事件
+                    await sio.emit('today_warning_count_update', {'count': count})
+                    logging.info(f"推送当日预警总数更新: {count}")
+                    # --- 新增逻辑结束 ---
+
                 except sqlite3.Error as e:
                     logging.error(f"后台任务预警信息写入数据库失败: {e}", exc_info=True)
                 finally:

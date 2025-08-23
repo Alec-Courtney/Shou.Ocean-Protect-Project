@@ -295,6 +295,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateStatusPanel(data);
             }
         });
+
+        // --- 新增逻辑开始 ---
+        // 监听 'today_warning_count_update' 事件，接收后端推送的当日预警总数更新
+        socket.on('today_warning_count_update', (data) => {
+            console.log('收到当日预警总数更新:', data.count);
+            // 更新统计面板显示的预警总数
+            statsCount.textContent = data.count;
+            // 同时更新前端的 dailyWarningCount 变量
+            dailyWarningCount = data.count;
+        });
+        // --- 新增逻辑结束 ---
     }
 
     // =========================================================================
@@ -346,6 +357,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     lon: lon,
                     lat: lat
                 });
+                // --- 新增逻辑开始 ---
+                // 当有新的预警时，调用 clearHistory() 来刷新历史预警列表
+                clearHistory();
+                // --- 新增逻辑结束 ---
             }
             // 注意：预警解除时 (warning_level变为0)，我们不主动移除弹窗，让它自然被新的弹窗顶替掉
 

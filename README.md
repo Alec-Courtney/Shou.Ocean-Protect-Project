@@ -133,3 +133,4 @@
 *   **`ModuleNotFoundError`**: 确保所有Python依赖都已通过 `pip install` 正确安装。
 *   **GeoJSON文件未找到**: 确保您已成功运行 `python Scripts/convert_geojson.py` 脚本。
 *   **HTTP请求失败 (模拟器)**: 确保后端服务器 (`python backend/main.py`) 正在运行，并且模拟器中的服务器地址 (`http://localhost:8000/api/gps_data`) 是正确的。
+

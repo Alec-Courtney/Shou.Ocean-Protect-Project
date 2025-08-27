@@ -98,7 +98,7 @@ class AppController(tk.Tk):
         ttk.Entry(conn_frame, textvariable=self.server_url_var, width=30).grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
 
         ttk.Label(conn_frame, text="MMSI:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.boat_id_var = tk.StringVar(value="412333807")
+        self.boat_id_var = tk.StringVar(value="412209103")
         ttk.Entry(conn_frame, textvariable=self.boat_id_var, width=15).grid(row=1, column=1, padx=5, pady=5)
 
         ttk.Label(conn_frame, text="船只名称:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
@@ -225,7 +225,7 @@ class AppController(tk.Tk):
         负责根据当前速度和航向计算模拟船只的新位置，并周期性地发送HTTP POST请求到后端。
         """
         # 初始经纬度，可以根据需要调整
-        lat, lon = 20.9, 125.39 
+        lat, lon = 19.0, 124.39 
         try:
             interval_seconds = float(self.interval_var.get())
         except ValueError:

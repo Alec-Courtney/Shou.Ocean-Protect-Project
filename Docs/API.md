@@ -94,11 +94,13 @@
     ```json
     [
       {
+        "id": 123,
         "timestamp": "2025-08-17 10:15:00",
         "latitude": 22.5,
         "longitude": 118.9,
         "warning_level": 2,
-        "details": "预测路径: ..."
+        "details": "预测路径: ...",
+        "boat_name": "测试船01"
       },
       ...
     ]
@@ -115,12 +117,14 @@
     ```json
     [
       {
+        "id": 456,
         "boat_id": "BOAT-001",
         "timestamp": "2025-08-17 10:15:00",
         "warning_level": 2,
         "latitude": 22.5,
         "longitude": 118.9,
-        "details": "预测路径: ..."
+        "details": "预测路径: ...",
+        "boat_name": "测试船01"
       },
       ...
     ]
@@ -149,12 +153,14 @@
     ```json
     [
       {
+        "id": 789,
         "boat_id": "BOAT-001",
         "timestamp": "2025-08-17 11:00:00",
         "warning_level": 1,
         "latitude": 22.6,
         "longitude": 119.0,
-        "details": "..."
+        "details": "...",
+        "boat_name": "测试船01"
       },
       ...
     ]
@@ -177,3 +183,52 @@
 *   **请求方法**: `GET`
 *   **成功响应 (`200 OK`)**: 返回 `config.json` 的完整内容。
 *   **失败响应 (`500 Internal Server Error`)**: 如果服务器配置未加载。
+
+---
+
+## 6. WebSocket 事件
+
+后端通过 Socket.IO 向前端实时推送数据，主要事件如下：
+
+### `gps_update`
+* **触发条件**：收到新的 GPS 数据点并通过节流校验后推送。
+* **载荷示例**：
+    ```json
+    {
+      "boat_id": "BOAT-001",
+      "boat_name": "测试船01",
+      "lat": 22.5031,
+      "lon": 118.9452,
+      "speed_knots": 4.8,
+      "bearing_deg": 182.0,
+      "warning_level": 1,
+      "prediction_path": [[118.9452, 22.5031], ...],
+      "timestamp": "2025-08-17T11:05:12.345678"
+    }
+    ```
+
+### `today_warning_count_update`
+* **触发条件**：写入新的预警记录后，重新统计当天预警次数。
+* **载荷示例**：
+    ```json
+    {
+      "count": 6
+    }
+    ```
+
+### `warning_created`
+* **触发条件**：产生新的预警记录时推送（包含数据库自增 `id`，用于前端去重）。
+* **载荷示例**：
+    ```json
+    {
+      "id": 789,
+      "boat_id": "BOAT-001",
+      "boat_name": "测试船01",
+      "warning_level": 1,
+      "latitude": 22.6,
+      "longitude": 119.0,
+      "timestamp": "2025-08-17T11:00:00",
+      "details": "预测路径: ...",
+      "prediction_path": [[119.0, 22.6], ...]
+    }
+    ```

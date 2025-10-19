@@ -72,6 +72,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // V4.6 新增：用于跟踪当日预警总数的变量
     let dailyWarningCount = 0;
+    const MAX_TODAY_WARNINGS = 200; // 限制当天预警缓存长度
+    let todaysWarnings = []; // 缓存当天预警列表
+    const todaysWarningMap = new Map(); // 通过ID去重当天预警
+    let isHistoryView = false; // 标记当前是否处于历史查询模式
 
     // 预加载不同预警等级的图标，避免重复创建
     const warningIcons = {
@@ -96,6 +100,47 @@ document.addEventListener('DOMContentLoaded', () => {
             iconAnchor: [16, 16],
         })
     };
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function buildBoatLabelHtml(displayText) {
+        const safeText = escapeHtml(displayText ?? '');
+        return `<div style="background-color: rgba(255,255,255,0.8); padding: 2px 5px; border-radius: 3px; font-size: 12px; white-space: nowrap;">${safeText}</div>`;
+    }
+
+    function normalizeWarningRecord(rawWarning) {
+        if (!rawWarning) {
+            return null;
+        }
+        const boatId = (rawWarning.boat_id || '').trim();
+        const timestamp = rawWarning.timestamp || new Date().toISOString();
+        const fallbackIdBase = timestamp ? `${boatId}-${timestamp}` : `${boatId}-${Date.now()}`;
+        const warningId = rawWarning.id !== undefined && rawWarning.id !== null
+            ? String(rawWarning.id)
+            : fallbackIdBase;
+        const warningLevel = Number(rawWarning.warning_level ?? 0);
+        const latitude = Number(rawWarning.latitude);
+        const longitude = Number(rawWarning.longitude);
+        const details = rawWarning.details || '';
+        const boatName = (rawWarning.boat_name || '').trim();
+        return {
+            id: warningId,
+            boat_id: boatId,
+            warning_level: warningLevel,
+            latitude,
+            longitude,
+            timestamp,
+            details,
+            boat_name: boatName || undefined,
+        };
+    }
 
     // =========================================================================
     // 地图初始化与数据加载
@@ -298,13 +343,86 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- 新增逻辑开始 ---
         // 监听 'today_warning_count_update' 事件，接收后端推送的当日预警总数更新
         socket.on('today_warning_count_update', (data) => {
-            console.log('收到当日预警总数更新:', data.count);
-            // 更新统计面板显示的预警总数
-            statsCount.textContent = data.count;
-            // 同时更新前端的 dailyWarningCount 变量
-            dailyWarningCount = data.count;
+            const nextCount = Number(data?.count ?? 0);
+            console.log('收到当日预警总数更新:', nextCount);
+            dailyWarningCount = nextCount;
+            if (!isHistoryView) {
+                statsTitle.textContent = '当日预警总数';
+                statsCount.textContent = nextCount;
+            }
         });
         // --- 新增逻辑结束 ---
+
+        socket.on('warning_created', (warning) => {
+            try {
+                const normalizedWarning = normalizeWarningRecord(warning);
+                if (!normalizedWarning) {
+                    return;
+                }
+
+                const { id: warningId, boat_id: normalizedId, boat_name: normalizedBoatName } = normalizedWarning;
+                if (normalizedBoatName) {
+                    allBoatsInfo[normalizedId] = { boat_name: normalizedBoatName };
+                    const cachedBoat = boatsData[normalizedId];
+                    if (cachedBoat) {
+                        cachedBoat.boat_name = normalizedBoatName;
+                        if (cachedBoat.label) {
+                            cachedBoat.label.setIcon(L.divIcon({
+                                className: 'boat-label',
+                                html: buildBoatLabelHtml(normalizedBoatName),
+                                iconSize: [100, 20],
+                                iconAnchor: [50, -10]
+                            }));
+                        }
+                    }
+                    updateBoatList();
+                }
+
+                const hasExisting = todaysWarningMap.has(warningId);
+                todaysWarningMap.set(warningId, normalizedWarning);
+
+                if (hasExisting) {
+                    const existingIndex = todaysWarnings.findIndex(w => w.id === warningId);
+                    if (existingIndex !== -1) {
+                        todaysWarnings[existingIndex] = normalizedWarning;
+                    } else {
+                        todaysWarnings.unshift(normalizedWarning);
+                    }
+                } else {
+                    todaysWarnings.unshift(normalizedWarning);
+                    if (todaysWarnings.length > MAX_TODAY_WARNINGS) {
+                        const removed = todaysWarnings.pop();
+                        if (removed && removed.id) {
+                            todaysWarningMap.delete(removed.id);
+                        }
+                    }
+                }
+
+                if (!isHistoryView) {
+                    updateWarningList(todaysWarnings);
+                }
+
+                if (!hasExisting) {
+                    const boatDisplayName = normalizedBoatName
+                        || allBoatsInfo[normalizedId]?.boat_name
+                        || normalizedId
+                        || '未知船只';
+                    const warningTime = normalizedWarning.timestamp
+                        ? new Date(normalizedWarning.timestamp).toLocaleString()
+                        : new Date().toLocaleString();
+                    showWarning({
+                        level: normalizedWarning.warning_level,
+                        name: boatDisplayName,
+                        id: normalizedId,
+                        time: warningTime,
+                        lon: normalizedWarning.longitude,
+                        lat: normalizedWarning.latitude
+                    });
+                }
+            } catch (error) {
+                console.error('处理 warning_created 事件失败:', error);
+            }
+        });
     }
 
     // =========================================================================
@@ -323,17 +441,32 @@ document.addEventListener('DOMContentLoaded', () => {
         let { boat_id, boat_name, lat, lon, bearing_deg, warning_level, prediction_path, timestamp } = data;
         boat_id = boat_id.trim(); // 清理 boat_id 中的空白字符，特别是换行符
         const latLng = [lat, lon]; // Leaflet 接受 [latitude, longitude] 格式
+        const cleanedBoatName = (boat_name || '').trim();
 
         console.log(`收到船只 ${boat_id} 的GPS更新:`, data); // 添加日志，用于调试
 
         // 步骤 1: 检查船只图层是否存在于 `boatsData` 中，如果不存在则为新船只创建所有图层。
         if (!boatsData[boat_id] || !boatsData[boat_id].marker) {
             console.log(`为新船只 ${boat_id} 创建图层`); // 添加日志
-            createBoatLayers(boat_id, { latLng, warning_level });
+            createBoatLayers(boat_id, { latLng, warning_level, boat_name: cleanedBoatName || boat_id });
         }
 
         // 步骤 2: 获取现有图层对象并进行属性更新。
         const boat = boatsData[boat_id];
+        if (cleanedBoatName) {
+            boat.boat_name = cleanedBoatName;
+            allBoatsInfo[boat_id] = { boat_name: cleanedBoatName };
+            if (boat.label) {
+                boat.label.setIcon(L.divIcon({
+                    className: 'boat-label',
+                    html: buildBoatLabelHtml(cleanedBoatName),
+                    iconSize: [100, 20],
+                    iconAnchor: [50, -10]
+                }));
+            }
+        } else if (!boat.boat_name) {
+            boat.boat_name = boat_id;
+        }
         
         // V4.5 新增：更新船只的最后通信时间戳
         boat.last_update = Date.now();
@@ -344,29 +477,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // 2.2 仅在预警等级发生变化时才更新图标和触发弹窗
         if (boat.warning_level !== warning_level) {
             boat.marker.setIcon(warningIcons[warning_level] || warningIcons[0]); // 更新图标
-
-            // 当预警等级发生变化且大于0时，触发弹窗逻辑
-            if (warning_level > 0) {
-                // V4.9: 增加当日预警计数
-                dailyWarningCount++;
-                statsCount.textContent = dailyWarningCount; // 更新统计面板显示
-                
-                // 创建并显示新的预警项
-                showWarning({
-                    level: warning_level,
-                    name: boat_name || '未知船只',
-                    id: boat_id,
-                    time: new Date(timestamp).toLocaleString(),
-                    lon: lon,
-                    lat: lat
-                });
-                // --- 新增逻辑开始 ---
-                // 当有新的预警时，调用 clearHistory() 来刷新历史预警列表
-                clearHistory();
-                // --- 新增逻辑结束 ---
-            }
-            // 注意：预警解除时 (warning_level变为0)，我们不主动移除弹窗，让它自然被新的弹窗顶替掉
-
             boat.warning_level = warning_level; // 更新缓存中的预警等级
             updateBoatList(); // 更新UI列表中的船只图标
         }
@@ -425,14 +535,17 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {object} initialData - 包含初始经纬度 `latLng` 和预警等级 `warning_level` 的对象。
      */
     function createBoatLayers(boat_id, initialData) {
-        const { latLng, warning_level } = initialData;
+        const { latLng, warning_level, boat_name } = initialData;
+        const cleanedBoatId = boat_id.trim();
+        const cleanedBoatName = (boat_name || '').trim();
+        const displayName = cleanedBoatName || cleanedBoatId;
 
         // 确保历史查询的船只选择器中包含此船只
         // 避免重复添加，只在不存在时添加
         if (!historyBoatSelect.querySelector(`option[value="${boat_id}"]`)) {
             const option = document.createElement('option');
             option.value = boat_id;
-            option.textContent = boat_id;
+            option.textContent = cleanedBoatName ? `${cleanedBoatName} (${cleanedBoatId})` : cleanedBoatId;
             // 将新船只选项插入到“请选择船只”之前，但“所有船只”之后
             const placeholderOption = historyBoatSelect.querySelector('option[value=""]');
             if (placeholderOption) {
@@ -458,23 +571,27 @@ document.addEventListener('DOMContentLoaded', () => {
             label: L.marker(latLng, {
                 icon: L.divIcon({
                     className: 'boat-label', // CSS 类名
-                    html: `<div style="background-color: rgba(255,255,255,0.8); padding: 2px 5px; border-radius: 3px; font-size: 12px; white-space: nowrap;">${boat_id}</div>`,
+                    html: buildBoatLabelHtml(displayName),
                     iconSize: [100, 20], // 图标大小
                     iconAnchor: [50, -10] // 图标锚点，使标签位于标记上方
                 })
             }),
-            warning_level: warning_level // 缓存当前预警等级
+            warning_level: warning_level, // 缓存当前预警等级
+            boat_name: displayName
         };
 
-        boatsData[boat_id] = boat; // 将新创建的船只对象添加到全局数据管理中
+        boatsData[cleanedBoatId] = boat; // 将新创建的船只对象添加到全局数据管理中
+        if (!allBoatsInfo[cleanedBoatId] || allBoatsInfo[cleanedBoatId].boat_name === cleanedBoatId) {
+            allBoatsInfo[cleanedBoatId] = { boat_name: displayName };
+        }
         updateBoatList(); // 有新船加入，更新UI上的船只列表
 
         // 绑定点击事件到船只标记，点击时选中该船只
-        boat.marker.on('click', () => selectBoat(boat_id));
+        boat.marker.on('click', () => selectBoat(cleanedBoatId));
 
         // 如果这是第一艘被添加的船只，则默认选中它
         if (!selectedBoatId) {
-            selectBoat(boat_id);
+            selectBoat(cleanedBoatId);
         } else {
             // 如果不是第一艘船，默认不显示其路径，因为 selectBoat 会处理路径的显示/隐藏
             // 只有被选中的船只的路径才会被添加到地图上
@@ -491,23 +608,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const boats = await response.json();
-            console.log("从后端获取的船只列表:", boats); // 添加日志
             // 清空并填充 allBoatsInfo 对象
             Object.keys(allBoatsInfo).forEach(key => delete allBoatsInfo[key]);
             boats.forEach(b => {
                 // 确保 boat_id 在存储前也被清理
                 const cleanedBoatId = b.boat_id.trim();
-                allBoatsInfo[cleanedBoatId] = { boat_name: b.boat_name || cleanedBoatId };
+                const cleanedBoatName = (b.boat_name || '').trim();
+                allBoatsInfo[cleanedBoatId] = { boat_name: cleanedBoatName || cleanedBoatId };
             });
-            console.log("填充后的 allBoatsInfo:", allBoatsInfo); // 添加日志
 
             // 保留“所有船只”和“请选择船只”选项
             historyBoatSelect.innerHTML = '<option value="all_boats">-- 所有船只 --</option><option value="">-- 请选择船只 --</option>';
             boats.forEach(b => {
                 const option = document.createElement('option');
-                option.value = b.boat_id;
-                // 下拉列表中显示船只ID
-                option.textContent = b.boat_id;
+                const cleanedBoatId = b.boat_id.trim();
+                const cleanedBoatName = (b.boat_name || '').trim();
+                option.value = cleanedBoatId;
+                option.textContent = cleanedBoatName ? `${cleanedBoatName} (${cleanedBoatId})` : cleanedBoatId;
                 historyBoatSelect.appendChild(option);
             });
         } catch (error) {
@@ -522,8 +639,11 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {object} data - 船只的实时GPS数据包，包含船只ID、经纬度、速度、航向和预警等级。
      */
     function updateStatusPanel(data) {
-        boatIdVal.textContent = data.boat_id;
-        boatNameVal.textContent = data.boat_name || '--'; // 更新船只名称，如果不存在则显示'--'
+        const cleanedBoatId = (data.boat_id || '').trim();
+        boatIdVal.textContent = cleanedBoatId || data.boat_id || '--';
+        const cleanedBoatName = (data.boat_name || '').trim();
+        const cachedBoatName = boatsData[cleanedBoatId]?.boat_name;
+        boatNameVal.textContent = cleanedBoatName || cachedBoatName || '--'; // 更新船只名称，如果不存在则显示'--'
         lonVal.textContent = data.lon.toFixed(6);       // 经度保留6位小数
         latVal.textContent = data.lat.toFixed(6);       // 纬度保留6位小数
         speedVal.textContent = data.speed_knots.toFixed(2); // 速度保留2位小数
@@ -547,15 +667,35 @@ document.addEventListener('DOMContentLoaded', () => {
             // 遍历从后端获取的船只列表
             boats.forEach(b => {
                 const cleanedBoatId = b.boat_id.trim(); // 清理 boat_id
-                // 如果本地 `boatsData` 中没有该船只的数据，则创建一个包含最后更新时间的对象。
-                if (!boatsData[cleanedBoatId]) {
-                    boatsData[cleanedBoatId] = { 
-                        marker: null, 
+                const cleanedBoatName = (b.boat_name || '').trim();
+                const lastUpdateTime = b.last_update_time ? new Date(b.last_update_time).getTime() : Date.now();
+                const existingBoat = boatsData[cleanedBoatId];
+
+                if (!existingBoat) {
+                    boatsData[cleanedBoatId] = {
+                        marker: null,
                         warning_level: 0,
-                        // V4.5 修正：将API返回的ISO格式时间字符串转换为毫秒时间戳
-                        last_update: new Date(b.last_update_time).getTime() 
+                        last_update: lastUpdateTime,
+                        boat_name: cleanedBoatName || cleanedBoatId
                     };
+                } else {
+                    existingBoat.last_update = lastUpdateTime;
+                    if (cleanedBoatName) {
+                        existingBoat.boat_name = cleanedBoatName;
+                        if (existingBoat.label) {
+                            existingBoat.label.setIcon(L.divIcon({
+                                className: 'boat-label',
+                                html: buildBoatLabelHtml(cleanedBoatName),
+                                iconSize: [100, 20],
+                                iconAnchor: [50, -10]
+                            }));
+                        }
+                    } else if (!existingBoat.boat_name) {
+                        existingBoat.boat_name = cleanedBoatId;
+                    }
                 }
+
+                allBoatsInfo[cleanedBoatId] = { boat_name: cleanedBoatName || cleanedBoatId };
             });
             updateBoatList(); // 更新UI上的船只列表
         } catch (error) {
@@ -597,7 +737,8 @@ document.addEventListener('DOMContentLoaded', () => {
             li.addEventListener('click', () => selectBoat(boat_id));
 
             const boatNameSpan = document.createElement('span');
-            boatNameSpan.textContent = boat_id; // 显示船只ID
+            const displayName = boatsData[boat_id]?.boat_name || boat_id;
+            boatNameSpan.textContent = displayName === boat_id ? displayName : `${displayName} (${boat_id})`; // 显示船只名称和ID
             li.appendChild(boatNameSpan);
 
             // 添加船只状态图标 (根据预警等级显示不同图标)
@@ -650,7 +791,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 清空状态面板的显示内容，等待该船只的下一次实时数据更新
         boatIdVal.textContent = boat_id;
-        boatNameVal.textContent = '--'; // 清空船只名称
+        boatNameVal.textContent = boatsData[boat_id]?.boat_name || '--'; // 显示缓存的船只名称
         lonVal.textContent = '--';
         latVal.textContent = '--';
         speedVal.textContent = '--'; // 清空速度显示
@@ -680,6 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             if (selectedHistoryBoatId === 'all_boats') {
+                isHistoryView = true;
                 // 查询所有警报
                 const allWarningsResponse = fetch(`http://localhost:8000/api/all_warnings?start_time=${startTime}&end_time=${endTime}`);
                 allWarningsResponse.then(response => {
@@ -689,14 +831,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     return response.json();
                 }).then(allWarningsData => {
                     updateWarningList(allWarningsData); // 只更新预警信息列表
+                    statsTitle.textContent = '当前查询预警数';
+                    statsCount.textContent = allWarningsData.length;
                     // V4.9: 更新当日预警总数，因为查询历史可能不影响当日总数，但为了UI一致性，我们不在这里更新它
                     // statsTitle.textContent = '当前查询预警数';
                     // statsCount.textContent = allWarningsData.length;
                 }).catch(error => {
+                    isHistoryView = false;
                     console.error("无法获取所有历史预警:", error);
                     statusText.textContent = "错误: 无法获取所有历史预警";
                 });
             } else if (selectedHistoryBoatId) {
+                isHistoryView = true;
                 // 查询特定船只的历史数据
                 // 1. 获取历史轨迹数据
                 const historyResponse = fetch(`http://localhost:8000/api/boats/${selectedHistoryBoatId}/history?start_time=${startTime}&end_time=${endTime}`);
@@ -739,6 +885,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     })
                     .catch(error => {
+                        isHistoryView = false;
                         console.error("查询历史数据失败:", error);
                         statusText.textContent = "错误: 查询历史数据失败";
                     });
@@ -746,6 +893,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("请选择一艘船或选择'所有船只'进行历史查询！");
             }
         } catch (error) {
+            isHistoryView = false;
             console.error("查询历史数据失败:", error);
             statusText.textContent = "错误: 查询历史数据失败";
         }
@@ -755,6 +903,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * 清除历史查询结果。
      */
     function clearHistory() {
+        isHistoryView = false;
         historyDisplayLayer.clearLayers();
         warningList.innerHTML = ''; // 清空预警信息列表
         // V4.9: 恢复显示当日预警总数和列表
@@ -772,13 +921,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
-            statsTitle.textContent = '当日预警总数';
-            statsCount.textContent = data.count;
+            if (!isHistoryView) {
+                statsTitle.textContent = '当日预警总数';
+                statsCount.textContent = data.count;
+            }
             // V4.9: 初始化 dailyWarningCount
             dailyWarningCount = data.count;
         } catch (error) {
             console.error("无法获取当天预警总数:", error);
-            statsCount.textContent = '错误';
+            if (!isHistoryView) {
+                statsCount.textContent = '错误';
+            }
             dailyWarningCount = 0; // 发生错误时重置计数
         }
     }
@@ -793,7 +946,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const warnings = await response.json();
-            updateWarningList(warnings);
+            todaysWarningMap.clear();
+            todaysWarnings = [];
+            for (const rawWarning of warnings) {
+                const normalized = normalizeWarningRecord(rawWarning);
+                if (!normalized) {
+                    continue;
+                }
+                if (todaysWarningMap.has(normalized.id)) {
+                    continue;
+                }
+                todaysWarningMap.set(normalized.id, normalized);
+                todaysWarnings.push(normalized);
+                if (todaysWarnings.length >= MAX_TODAY_WARNINGS) {
+                    break;
+                }
+            }
+            if (!isHistoryView) {
+                updateWarningList(todaysWarnings);
+            }
         } catch (error) {
             console.error("无法获取当天预警列表:", error);
             warningList.innerHTML = '<li>无法加载当天预警</li>';
@@ -816,8 +987,13 @@ document.addEventListener('DOMContentLoaded', () => {
         warnings.forEach(w => {
             const li = document.createElement('li');
             const time = new Date(w.timestamp).toLocaleString();
-            const boatId = (w.boat_id || boatIdForHistory).trim(); // 确保 boatId 被清理
-            const boatName = allBoatsInfo[boatId]?.boat_name || '未知船只';
+            const boatId = (w.boat_id || boatIdForHistory || '').trim(); // 确保 boatId 被清理
+            const boatNameRaw = (w.boat_name || '').trim();
+            const boatName = boatNameRaw || allBoatsInfo[boatId]?.boat_name || (boatId || '未知船只');
+            const lonValue = Number(w.longitude);
+            const latValue = Number(w.latitude);
+            const lonText = Number.isFinite(lonValue) ? lonValue.toFixed(6) : '--';
+            const latText = Number.isFinite(latValue) ? latValue.toFixed(6) : '--';
 
             // 获取颜色
             const levelColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${w.warning_level}-bg`).trim();
@@ -826,15 +1002,15 @@ document.addEventListener('DOMContentLoaded', () => {
             li.innerHTML = `
                 <div class="warning-popup">
                     <div class="warning-popup-level" style="background-color: ${levelColor}; color: ${levelTextColor};">
-                        <span>${w.warning_level}</span>
+                        <span>${escapeHtml(String(w.warning_level))}</span>
                     </div>
                     <div class="warning-popup-info">
                         <div class="boat-info">
-                            <span class="boat-name">${boatName}</span>
-                            <span class="boat-id">${boatId}</span>
+                            <span class="boat-name">${escapeHtml(boatName)}</span>
+                            <span class="boat-id">${escapeHtml(boatId)}</span>
                         </div>
-                        <div class="time-info">${time}</div>
-                        <div class="location-info">经度: ${w.longitude.toFixed(6)}, 纬度: ${w.latitude.toFixed(6)}</div>
+                        <div class="time-info">${escapeHtml(time)}</div>
+                        <div class="location-info">经度: ${escapeHtml(lonText)}, 纬度: ${escapeHtml(latText)}</div>
                     </div>
                 </div>
             `;
@@ -898,17 +1074,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const levelTextColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${level}-text`).trim();
 
         // 3. 填充内容
+        const levelText = escapeHtml(String(level));
+        const nameText = escapeHtml(name);
+        const idText = escapeHtml(id);
+        const timeText = escapeHtml(time);
+        const lonNumber = Number(lon);
+        const latNumber = Number(lat);
+        const lonText = Number.isFinite(lonNumber) ? lonNumber.toFixed(6) : '--';
+        const latText = Number.isFinite(latNumber) ? latNumber.toFixed(6) : '--';
         warningEl.innerHTML = `
             <div class="warning-popup-level" style="background-color: ${levelColor}; color: ${levelTextColor};">
-                <span>${level}</span>
+                <span>${levelText}</span>
             </div>
             <div class="warning-popup-info">
                 <div class="boat-info">
-                    <span class="boat-name">${name}</span>
-                    <span class="boat-id">${id}</span>
+                    <span class="boat-name">${nameText}</span>
+                    <span class="boat-id">${idText}</span>
                 </div>
-                <div class="time-info">${time}</div>
-                <div class="location-info">经度: ${lon.toFixed(6)}, 纬度: ${lat.toFixed(6)}</div>
+                <div class="time-info">${timeText}</div>
+                <div class="location-info">经度: ${escapeHtml(lonText)}, 纬度: ${escapeHtml(latText)}</div>
             </div>
         `;
 
@@ -923,14 +1107,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 新增功能：播放提示音
         if (warningSound) {
-            warningSound.play().catch(error => console.error("音频播放失败: 请确保 'frontend/sounds/warning.mp3' 文件存在。", error));
+            warningSound.currentTime = 0;
+            warningSound.play().catch(error => console.error("音频播放失败: 请确保 'frontend/sounds/warning.wav' 文件存在。", error));
         }
 
         // 新增功能：平滑移动地图视角到预警船只
-        const targetLatLng = [lat, lon];
-        map.flyTo(targetLatLng, 12, { // 飞到目标坐标，缩放级别设为12
-            animate: true,
-            duration: 1.5 // 动画持续时间1.5秒
-        });
+        if (Number.isFinite(latNumber) && Number.isFinite(lonNumber)) {
+            const targetLatLng = [latNumber, lonNumber];
+            map.flyTo(targetLatLng, 12, { // 飞到目标坐标，缩放级别设为12
+                animate: true,
+                duration: 1.5 // 动画持续时间1.5秒
+            });
+        }
     }
 });

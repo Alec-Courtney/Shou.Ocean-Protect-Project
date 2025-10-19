@@ -10,6 +10,7 @@ import time
 import logging
 import sqlite3
 import sys
+from contextlib import closing
 from datetime import datetime, date
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
@@ -103,31 +104,46 @@ class GPSData(BaseModel):
 # 核心业务逻辑 (后台任务)
 # =============================================================================
 async def process_gps_data_background(data: GPSData):
+    warning_payload = None
+    today_warning_count = None
     try:
         logging.info(f"后台任务开始处理船只 {data.boat_id} 的数据...")
-        
-        # 1. 存入数据库
-        conn = get_db_connection()
-        try:
-            if data.boat_name:
+
+        # 1. 数据持久化
+        with closing(get_db_connection()) as conn:
+            try:
+                if data.boat_name:
+                    conn.execute(
+                        """
+                        INSERT INTO boats (boat_id, boat_name, last_update_time)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(boat_id) DO UPDATE
+                            SET boat_name = excluded.boat_name,
+                                last_update_time = excluded.last_update_time
+                        """,
+                        (data.boat_id, data.boat_name, data.timestamp)
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO boats (boat_id, last_update_time)
+                        VALUES (?, ?)
+                        ON CONFLICT(boat_id) DO UPDATE
+                            SET last_update_time = excluded.last_update_time
+                        """,
+                        (data.boat_id, data.timestamp)
+                    )
                 conn.execute(
-                    "INSERT INTO boats (boat_id, boat_name, last_update_time) VALUES (?, ?, ?) ON CONFLICT(boat_id) DO UPDATE SET boat_name = excluded.boat_name, last_update_time = excluded.last_update_time",
-                    (data.boat_id, data.boat_name, data.timestamp)
+                    """
+                    INSERT INTO gps_positions (boat_id, timestamp, latitude, longitude, speed_knots, bearing_deg)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (data.boat_id, data.timestamp, data.latitude, data.longitude, data.speed_knots, data.bearing_deg)
                 )
-            else:
-                conn.execute(
-                    "INSERT INTO boats (boat_id, last_update_time) VALUES (?, ?) ON CONFLICT(boat_id) DO UPDATE SET last_update_time = excluded.last_update_time",
-                    (data.boat_id, data.timestamp)
-                )
-            conn.execute(
-                "INSERT INTO gps_positions (boat_id, timestamp, latitude, longitude, speed_knots, bearing_deg) VALUES (?, ?, ?, ?, ?, ?)",
-                (data.boat_id, data.timestamp, data.latitude, data.longitude, data.speed_knots, data.bearing_deg)
-            )
-            conn.commit()
-        except sqlite3.Error as e:
-            logging.error(f"后台任务数据库操作失败: {e}", exc_info=True)
-        finally:
-            conn.close()
+                conn.commit()
+            except sqlite3.Error as e:
+                logging.error(f"后台任务数据库操作失败: {e}", exc_info=True)
+                return
 
         # 2. 实时分析
         fishing_zones_path = os.path.join(project_root, 'frontend', 'data', 'fishing_zones.geojson')
@@ -138,38 +154,54 @@ async def process_gps_data_background(data: GPSData):
         last_warning_level = last_warning_state.get(data.boat_id, 0)
         if warning_level != last_warning_level:
             if warning_level > 0:
-                conn = get_db_connection()
-                try:
-                    conn.execute(
-                        "INSERT INTO warnings (boat_id, timestamp, warning_level, latitude, longitude, details) VALUES (?, ?, ?, ?, ?, ?)",
-                        (data.boat_id, data.timestamp, warning_level, data.latitude, data.longitude, f"预测路径: {prediction_path}")
-                    )
-                    conn.commit()
+                with closing(get_db_connection()) as conn:
+                    try:
+                        warning_id = None
+                        warning_cursor = conn.execute(
+                            """
+                            INSERT INTO warnings (boat_id, timestamp, warning_level, latitude, longitude, details)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (data.boat_id, data.timestamp, warning_level, data.latitude, data.longitude, f"预测路径: {prediction_path}")
+                        )
+                        warning_id = warning_cursor.lastrowid
+                        conn.commit()
 
-                    # --- 新增逻辑开始 ---
-                    # 查询当天预警总数
-                    today = date.today()
-                    start_of_day = datetime.combine(today, datetime.min.time())
-                    end_of_day = datetime.combine(today, datetime.max.time())
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        """
-                        SELECT COUNT(*) 
-                        FROM warnings 
-                        WHERE timestamp BETWEEN ? AND ?
-                        """,
-                        (start_of_day, end_of_day)
-                    )
-                    count = cursor.fetchone()[0]
-                    # 推送总数更新事件
-                    await sio.emit('today_warning_count_update', {'count': count})
-                    logging.info(f"推送当日预警总数更新: {count}")
-                    # --- 新增逻辑结束 ---
+                        today = date.today()
+                        start_of_day = datetime.combine(today, datetime.min.time())
+                        end_of_day = datetime.combine(today, datetime.max.time())
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            """
+                            SELECT COUNT(*) 
+                            FROM warnings 
+                            WHERE timestamp BETWEEN ? AND ?
+                            """,
+                            (start_of_day, end_of_day)
+                        )
+                        today_warning_count = int(cursor.fetchone()[0])
 
-                except sqlite3.Error as e:
-                    logging.error(f"后台任务预警信息写入数据库失败: {e}", exc_info=True)
-                finally:
-                    conn.close()
+                        boat_name = data.boat_name
+                        if not boat_name:
+                            name_row = conn.execute(
+                                "SELECT boat_name FROM boats WHERE boat_id = ?",
+                                (data.boat_id,)
+                            ).fetchone()
+                            boat_name = name_row["boat_name"] if name_row else None
+
+                        warning_payload = {
+                            "boat_id": data.boat_id,
+                            "boat_name": boat_name,
+                            "warning_level": warning_level,
+                            "latitude": data.latitude,
+                            "longitude": data.longitude,
+                            "timestamp": data.timestamp.isoformat(),
+                            "details": f"预测路径: {prediction_path}",
+                            "prediction_path": prediction_path,
+                            "id": warning_id,
+                        }
+                    except sqlite3.Error as e:
+                        logging.error(f"后台任务预警信息写入数据库失败: {e}", exc_info=True)
             last_warning_state[data.boat_id] = warning_level
 
         # 4. 实时推送 (节流逻辑)
@@ -184,6 +216,12 @@ async def process_gps_data_background(data: GPSData):
             }
             await sio.emit('gps_update', data_to_send)
             last_sent_times[data.boat_id] = current_time
+
+        if today_warning_count is not None:
+            await sio.emit('today_warning_count_update', {'count': today_warning_count})
+            logging.info(f"推送当日预警总数更新: {today_warning_count}")
+        if warning_payload:
+            await sio.emit('warning_created', warning_payload)
     except Exception as e:
         logging.error(f"处理船只 {data.boat_id} 的后台任务发生未知错误: {e}", exc_info=True)
 

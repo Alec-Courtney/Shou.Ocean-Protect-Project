@@ -5,3 +5,5 @@ websockets
 geopandas
 shapely
 requests
+pytest
+httpx

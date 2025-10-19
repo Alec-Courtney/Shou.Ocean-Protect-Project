@@ -125,7 +125,23 @@
 
 ---
 
-## 6. 故障排除
+## 6. 运行测试
+
+项目提供了针对预警 API 的基础集成测试，能够验证接口是否返回预期字段（包括新增的 `id` 与 `boat_name`）。
+
+1. 安装依赖（确保 `httpx`、`pytest` 已包含在 `requirements.txt` 中）：
+    ```bash
+    pip install -r requirements.txt
+    ```
+2. 运行测试（Windows 环境在项目根目录执行，或在命令前加入 `python -m`）：
+    ```bash
+    pytest -q
+    ```
+   测试会自动使用临时 SQLite 数据库，原始数据文件不会受到影响。
+
+---
+
+## 7. 故障排除
 
 *   **WebSocket连接失败**:
     *   确保后端服务器 (`python backend/main.py`) 正在运行且没有报错。

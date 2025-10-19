@@ -28,10 +28,18 @@ async def get_boat_warnings(boat_id: str, start_time: datetime, end_time: dateti
     try:
         warnings = conn.execute(
             """
-            SELECT timestamp, latitude, longitude, warning_level, details 
-            FROM warnings 
-            WHERE boat_id = ? AND timestamp BETWEEN ? AND ? 
-            ORDER BY timestamp ASC
+            SELECT 
+                w.id,
+                w.timestamp,
+                w.latitude,
+                w.longitude,
+                w.warning_level,
+                w.details,
+                b.boat_name
+            FROM warnings w
+            LEFT JOIN boats b ON b.boat_id = w.boat_id
+            WHERE w.boat_id = ? AND w.timestamp BETWEEN ? AND ?
+            ORDER BY w.timestamp ASC
             """,
             (boat_id, start_time, end_time)
         ).fetchall()
@@ -58,10 +66,19 @@ async def get_all_warnings(start_time: datetime, end_time: datetime):
     try:
         warnings = conn.execute(
             """
-            SELECT boat_id, timestamp, warning_level, latitude, longitude, details 
-            FROM warnings 
-            WHERE timestamp BETWEEN ? AND ? 
-            ORDER BY timestamp ASC
+            SELECT 
+                w.id,
+                w.boat_id,
+                w.timestamp,
+                w.warning_level,
+                w.latitude,
+                w.longitude,
+                w.details,
+                b.boat_name
+            FROM warnings w
+            LEFT JOIN boats b ON b.boat_id = w.boat_id
+            WHERE w.timestamp BETWEEN ? AND ?
+            ORDER BY w.timestamp ASC
             """,
             (start_time, end_time)
         ).fetchall()
@@ -113,10 +130,19 @@ async def get_today_warnings():
 
         warnings = conn.execute(
             """
-            SELECT boat_id, timestamp, warning_level, latitude, longitude, details 
-            FROM warnings 
-            WHERE timestamp BETWEEN ? AND ? 
-            ORDER BY timestamp DESC
+            SELECT 
+                w.id,
+                w.boat_id,
+                w.timestamp,
+                w.warning_level,
+                w.latitude,
+                w.longitude,
+                w.details,
+                b.boat_name
+            FROM warnings w
+            LEFT JOIN boats b ON b.boat_id = w.boat_id
+            WHERE w.timestamp BETWEEN ? AND ?
+            ORDER BY w.timestamp DESC
             """,
             (start_of_day, end_of_day)
         ).fetchall()

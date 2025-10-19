@@ -1,6 +1,24 @@
 # 更新日志
 
 ---
+## V4.6 更新日志 (2025-08-25)
+
+本次更新聚焦于数据推送完整性、前端实时体验、环境配置灵活性以及自动化测试与文档完善。
+
+*   **后端增强 - 实时推送精细化**:
+    *   `backend/main.py` 现在会在写入预警时携带数据库 `id` 并广播新的 `warning_created` 事件，同时推送最新的当日预警总数，避免前端额外轮询。
+    *   `/api/warnings/*` 接口（`backend/api/warnings.py`）统一返回 `id` 与 `boat_name` 字段，便于前端展示与去重。
+    *   通过环境变量 `OCEAN_PROTECT_DB_PATH`（`backend/database_utils.py`、`Scripts/database.py`）即可切换 SQLite 位置，测试与部署更加灵活。
+
+*   **前端优化 - 去重与安全展示**:
+    *   `frontend/js/main.js` 增加 `warning_created` 事件监听、预警缓存与历史模式隔离逻辑，避免实时推送干扰历史查询。
+    *   统一处理船只名称/ID，更新地图标签与弹窗，并对所有字段进行 HTML 转义，同时仅在经纬度有效时聚焦地图，提示音播放前会重置进度。
+
+*   **测试与文档**:
+    *   新增 `tests/test_warnings_api.py`，基于临时数据库验证预警 API 的新增字段；`requirements.txt` 加入 `pytest` 与 `httpx`。
+    *   `Docs/API.md`、`Docs/UpgradePlan.md`、`README.md` 分别更新接口说明、最新进展与“运行测试”章节，保持文档同步。
+
+---
 ## V4.5 更新日志 (2025-08-16)
 
 本次更新对预警系统的核心逻辑进行了重构，旨在提供更精确、更有层次感的预警信息。

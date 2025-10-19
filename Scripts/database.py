@@ -13,7 +13,15 @@ import logging
 
 # 获取项目根目录
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(project_root, 'database.db')
+DEFAULT_DB_PATH = os.path.join(project_root, 'database.db')
+DB_PATH_ENV_VAR = 'OCEAN_PROTECT_DB_PATH'
+
+def resolve_db_path() -> str:
+    """
+    解析当前应使用的数据库路径。
+    若环境变量 OCEAN_PROTECT_DB_PATH 存在，则优先使用该路径。
+    """
+    return os.environ.get(DB_PATH_ENV_VAR, DEFAULT_DB_PATH)
 
 def init_db():
     """
@@ -29,15 +37,16 @@ def init_db():
     此函数不接受参数，不返回任何值。
     它会记录数据库初始化过程中的信息和任何错误。
     """
-    if os.path.exists(DB_PATH):
-        logging.info(f"数据库文件已存在于: {DB_PATH}。跳过初始化。")
+    db_path = resolve_db_path()
+    if os.path.exists(db_path):
+        logging.info(f"数据库文件已存在于: {db_path}。跳过初始化。")
         return
 
-    logging.info(f"数据库文件不存在，将在 {DB_PATH} 创建新的数据库...")
+    logging.info(f"数据库文件不存在，将在 {db_path} 创建新的数据库...")
     conn = None # 初始化连接对象
     try:
         # 连接到数据库（如果文件不存在，会自动创建）
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
         # --- 创建 `boats` 表 ---

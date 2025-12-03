@@ -1,6 +1,18 @@
 # 更新日志
 
 ---
+## V4.8 更新日志 (2025-12-03)
+
+本轮更新聚焦在地图可读性与代码结构两端：既要把海疆轮廓看得更清楚，也要让脚本拆分后更易维护。
+
+*   **海岸线底图增强**  
+    *   `frontend/js/mapController.js` 将默认底图改为「Esri World Ocean Base + World Ocean Reference」叠加层，同时彻底移除了街道底图选项，底图切换只在“海疆轮廓/卫星影像”之间循环，专注海洋场景。  
+    *   `frontend/css/style.css` 对 `coastline-only-tiles` 提升对比度，并为地图容器设置深海渐变背景，海陆配色差异更明显；右侧悬浮工具条适度加宽，切换按钮更易点选。
+
+*   **前端脚本拆分**  
+    *   `frontend/js` 目录完成功能化拆分（如 `mapController.js`、`boatManager.js`、`historyManager.js`、`notifications.js` 等），核心逻辑不再集中在单一 `main.js`，职责更清晰、后续维护/联调成本更低。
+
+---
 ## V4.7 更新日志 (2025-12-03)
 
 本次迭代聚焦在“看得见、控得住”的前端体验升级，让实时监控面板具备现代化视觉与更高的信息密度。

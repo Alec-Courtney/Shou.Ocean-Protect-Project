@@ -34,26 +34,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearHistoryBtn = document.getElementById('clear-history-btn');
     const warningList = document.getElementById('warning-list');
     const boatIdVal = document.getElementById('boat-id-val');
-    const boatNameVal = document.getElementById('boat-name-val'); // 新增船只名称元素
-    const toggleLabelsBtn = document.getElementById('toggle-labels-btn'); // 新增显示标签按钮
+    const boatNameVal = document.getElementById('boat-name-val');
+    const toggleLabelsBtn = document.getElementById('toggle-labels-btn');
 
-    // 新增：历史查询相关元素
     const historyBoatSelect = document.getElementById('history-boat-select');
-
-    // 预警统计面板元素
     const statsTitle = document.getElementById('stats-title');
     const statsCount = document.getElementById('stats-count');
 
-    // 新增：侧边栏元素
-    const leftSidebar = document.getElementById('left-sidebar');
-    const rightSidebar = document.getElementById('right-sidebar');
-    // 修正：切换按钮现在是body的直接子元素
-    const leftSidebarToggle = document.getElementById('left-sidebar-toggle');
-    // const rightSidebarToggle = document.getElementById('right-sidebar-toggle'); // 不再需要
+    const toastContainer = document.getElementById('toast-container');
+    const warningSound = document.getElementById('warning-sound');
+    const notificationToggle = document.getElementById('notification-toggle');
+    const notificationClose = document.getElementById('notification-close');
+    const notificationCenter = document.getElementById('notification-center');
+    const notificationCountEl = document.getElementById('notification-count');
 
-    // 预警弹窗容器
-    const warningContainer = document.getElementById('warning-container');
-    const warningSound = document.getElementById('warning-sound'); // 新增：预警声音元素
+    const statOnlineEl = document.getElementById('stat-online-boats');
+    const statWarningCountEl = document.getElementById('stat-warning-count');
+    const statHighestRiskEl = document.getElementById('stat-highest-risk');
+    const statSelectedBoatEl = document.getElementById('stat-selected-boat');
+    const connectionPill = document.querySelector('.connection-pill');
+    const hudClockEl = document.getElementById('hud-clock');
+    const sparklinePath = document.getElementById('warning-sparkline-path');
+    const recenterBtn = document.getElementById('recenter-btn');
+    const toggleStyleBtn = document.getElementById('toggle-style-btn');
+    const mapLabelsToggleBtn = document.getElementById('map-labels-toggle');
+    const drawerButtons = document.querySelectorAll('.drawer-btn');
+    const drawerPanels = document.querySelectorAll('.drawer-panel');
 
 
     // 地图和通信核心对象 (V4.0)
@@ -62,6 +68,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let socket = null;
     let canvasRenderer = null; // Canvas渲染器实例
     let config = {}; // V4.4 新增：用于存储从后端获取的配置
+    const DEFAULT_VIEW = { center: [22.5, 114.0], zoom: 8 };
+    let baseLayers = {};
+    let currentBaseLayerKey = 'satellite';
 
     // 多船数据管理
     const boatsData = {}; // key: boat_id, value: { marker, historyPolyline, predictionPolyline, label, last_update, ... }
@@ -76,6 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let todaysWarnings = []; // 缓存当天预警列表
     const todaysWarningMap = new Map(); // 通过ID去重当天预警
     let isHistoryView = false; // 标记当前是否处于历史查询模式
+    let isNotificationCenterOpen = false;
+    let unseenNotificationCount = 0;
+    const warningTrend = [];
 
     // 预加载不同预警等级的图标，避免重复创建
     const warningIcons = {
@@ -142,6 +154,173 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function setActiveDrawer(target) {
+        if (!drawerPanels || !drawerPanels.length) return;
+        drawerPanels.forEach(panel => {
+            panel.classList.toggle('is-active', panel.id === `drawer-${target}`);
+        });
+        drawerButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.drawerTarget === target);
+        });
+    }
+
+    function toggleNotificationCenter(forceState = null) {
+        if (!notificationCenter) return;
+        if (typeof forceState === 'boolean') {
+            isNotificationCenterOpen = forceState;
+        } else {
+            isNotificationCenterOpen = !isNotificationCenterOpen;
+        }
+        notificationCenter.classList.toggle('hidden', !isNotificationCenterOpen);
+        if (isNotificationCenterOpen) {
+            setNotificationBadge(0);
+        }
+    }
+
+    function setNotificationBadge(value) {
+        unseenNotificationCount = Math.max(0, value);
+        if (notificationCountEl) {
+            notificationCountEl.textContent = unseenNotificationCount;
+            notificationCountEl.style.opacity = unseenNotificationCount > 0 ? '1' : '0.3';
+        }
+    }
+
+    function bumpNotificationBadge() {
+        if (!isNotificationCenterOpen) {
+            setNotificationBadge(unseenNotificationCount + 1);
+        }
+    }
+
+    function startClock() {
+        if (!hudClockEl) return;
+        const update = () => {
+            const now = new Date();
+            hudClockEl.textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
+        };
+        update();
+        setInterval(update, 1000);
+    }
+
+    function recordWarningTrend(count) {
+        warningTrend.push({ timestamp: Date.now(), count: Number(count) || 0 });
+        if (warningTrend.length > 24) {
+            warningTrend.shift();
+        }
+        renderSparkline();
+    }
+
+    function renderSparkline() {
+        if (!sparklinePath) return;
+        if (warningTrend.length < 2) {
+             sparklinePath.setAttribute('points', '');
+             return;
+        }
+        const width = 120;
+        const height = 32;
+        const counts = warningTrend.map(pt => pt.count);
+        const min = Math.min(...counts);
+        const max = Math.max(...counts);
+        const span = max - min || 1;
+        const step = width / (warningTrend.length - 1);
+        const points = warningTrend.map((pt, index) => {
+            const x = index * step;
+            const relative = (pt.count - min) / span;
+            const y = height - relative * height;
+            return `${x},${y}`;
+        }).join(' ');
+        sparklinePath.setAttribute('points', points);
+    }
+
+    function setWarningCardCount(value) {
+        if (!statWarningCountEl) return;
+        const sanitizedValue = Number.isFinite(value) ? value : '--';
+        statWarningCountEl.textContent = sanitizedValue;
+    }
+
+    function refreshSelectedBoatStat() {
+        if (!statSelectedBoatEl) return;
+        if (selectedBoatId) {
+            const displayName = boatsData[selectedBoatId]?.boat_name || selectedBoatId;
+            statSelectedBoatEl.textContent = displayName;
+        } else {
+            statSelectedBoatEl.textContent = '未选择';
+        }
+    }
+
+    function updateQuickStats(onlineBoatIds = []) {
+        if (statOnlineEl) {
+            statOnlineEl.textContent = onlineBoatIds.length;
+        }
+        if (statHighestRiskEl) {
+            const highest = onlineBoatIds.reduce((max, id) => {
+                const level = boatsData[id]?.warning_level ?? 0;
+                return Math.max(max, level);
+            }, 0);
+            statHighestRiskEl.textContent = highest;
+        }
+        refreshSelectedBoatStat();
+    }
+
+    function updateConnectionIndicator(isConnected) {
+        if (!connectionPill) return;
+        if (isConnected) {
+            connectionPill.classList.add('connected');
+        } else {
+            connectionPill.classList.remove('connected');
+        }
+    }
+
+    function updateBaseLayerButtonLabel() {
+        if (!toggleStyleBtn) return;
+        toggleStyleBtn.setAttribute('title', currentBaseLayerKey === 'satellite' ? '切换为街道底图' : '切换为卫星底图');
+    }
+
+    function toggleBaseLayer() {
+        if (!map || !baseLayers.satellite || !baseLayers.street) return;
+        const nextKey = currentBaseLayerKey === 'satellite' ? 'street' : 'satellite';
+        map.removeLayer(baseLayers[currentBaseLayerKey]);
+        baseLayers[nextKey].addTo(map);
+        currentBaseLayerKey = nextKey;
+        updateBaseLayerButtonLabel();
+    }
+
+    function recenterMap() {
+        if (!map) return;
+        if (selectedBoatId && boatsData[selectedBoatId]?.marker) {
+            const target = boatsData[selectedBoatId].marker.getLatLng();
+            map.flyTo(target, map.getZoom(), { duration: 1 });
+        } else {
+            map.flyTo(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom, { duration: 1.2 });
+        }
+    }
+
+    function toggleLabels(forceValue = null) {
+        if (!map) {
+            return;
+        }
+        if (typeof forceValue === 'boolean') {
+            showLabels = forceValue;
+        } else {
+            showLabels = !showLabels;
+        }
+        const primaryLabel = showLabels ? '隐藏标签' : '显示标签';
+        if (toggleLabelsBtn) {
+            toggleLabelsBtn.textContent = primaryLabel;
+        }
+        if (mapLabelsToggleBtn) {
+            mapLabelsToggleBtn.setAttribute('title', showLabels ? '隐藏标签' : '显示标签');
+        }
+        Object.values(boatsData).forEach(boat => {
+            if (boat.label) {
+                if (showLabels) {
+                    boat.label.addTo(map);
+                } else {
+                    map.removeLayer(boat.label);
+                }
+            }
+        });
+    }
+
     // =========================================================================
     // 地图初始化与数据加载
     // =========================================================================
@@ -156,13 +335,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         map = L.map('map', { 
             worldCopyJump: true // 允许在平移越过180度经线时，地图和标记物能无缝跳转
-        }).setView([22.5, 114.0], 8); // 默认视图中心 (例如：珠江口附近)
+        }).setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom); // 默认视图
 
-        // 使用 Esri World Imagery 卫星图层作为底图
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-            noWrap: true
-        }).addTo(map);
+        baseLayers = {
+            satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                noWrap: true
+            }),
+            street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            })
+        };
+        baseLayers.satellite.addTo(map);
+        currentBaseLayerKey = 'satellite';
+        updateBaseLayerButtonLabel();
 
         fetchConfig(); // V4.5 新增：加载后端配置
         fetchFishingZones(); // 地图初始化后立即加载渔区数据
@@ -305,6 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('成功连接到WebSocket服务器');
             statusText.textContent = '已连接';
             statusText.style.color = 'green';
+            updateConnectionIndicator(true);
             // 确保先获取所有船只的名称缓存，再获取初始实时船只列表和当天预警列表
             await fetchHistoryBoats(); // 等待船只信息加载完成，填充 allBoatsInfo
             fetchBoatList();           // 然后获取初始实时船只列表
@@ -316,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('与WebSocket服务器断开连接');
             statusText.textContent = '已断开';
             statusText.style.color = 'red';
+            updateConnectionIndicator(false);
         });
 
         // 监听 'connect_error' 事件，表示连接过程中发生错误
@@ -323,6 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('WebSocket连接错误:', error);
             statusText.textContent = '连接错误';
             statusText.style.color = 'orange'; // 错误时显示橙色
+            updateConnectionIndicator(false);
         });
 
         // 创建一个节流版的船只数据更新函数，限制每 1000 毫秒最多执行一次
@@ -346,6 +535,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const nextCount = Number(data?.count ?? 0);
             console.log('收到当日预警总数更新:', nextCount);
             dailyWarningCount = nextCount;
+            setWarningCardCount(dailyWarningCount);
+            recordWarningTrend(dailyWarningCount);
             if (!isHistoryView) {
                 statsTitle.textContent = '当日预警总数';
                 statsCount.textContent = nextCount;
@@ -402,7 +593,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateWarningList(todaysWarnings);
                 }
 
-                if (!hasExisting) {
+                if (!hasExisting && normalizedWarning.warning_level <= 2) {
                     const boatDisplayName = normalizedBoatName
                         || allBoatsInfo[normalizedId]?.boat_name
                         || normalizedId
@@ -418,6 +609,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         lon: normalizedWarning.longitude,
                         lat: normalizedWarning.latitude
                     });
+                } else if (!hasExisting) {
+                    bumpNotificationBadge();
                 }
             } catch (error) {
                 console.error('处理 warning_created 事件失败:', error);
@@ -464,8 +657,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     iconAnchor: [50, -10]
                 }));
             }
+            if (selectedBoatId === boat_id) {
+                refreshSelectedBoatStat();
+            }
         } else if (!boat.boat_name) {
             boat.boat_name = boat_id;
+            if (selectedBoatId === boat_id) {
+                refreshSelectedBoatStat();
+            }
         }
         
         // V4.5 新增：更新船只的最后通信时间戳
@@ -650,7 +849,10 @@ document.addEventListener('DOMContentLoaded', () => {
         bearingVal.textContent = data.bearing_deg.toFixed(2); // 航向保留2位小数
         warningLevelVal.textContent = data.warning_level; // 显示预警等级
         // 根据预警等级更新状态面板的CSS类，从而改变其背景颜色或边框样式
-        statusPanel.className = `panel warning-level-${data.warning_level}`;
+        if (statusPanel) {
+            ['warning-level-0', 'warning-level-1', 'warning-level-2', 'warning-level-3'].forEach(cls => statusPanel.classList.remove(cls));
+            statusPanel.classList.add(`warning-level-${data.warning_level}`);
+        }
     }
 
     /**
@@ -721,6 +923,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return boat.last_update && (now - boat.last_update < offlineTimeout);
         });
 
+        updateQuickStats(onlineBoats);
+
         if (onlineBoats.length === 0) {
             boatList.innerHTML = '<li>没有在线的船只</li>';
             return;
@@ -766,6 +970,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectedBoatId === boat_id) return;
 
         selectedBoatId = boat_id; // 更新当前选中船只的ID
+        refreshSelectedBoatStat();
         updateBoatList(); // 重新渲染船只列表，以高亮显示新选中的船只
 
         // 遍历所有船只，根据选中状态显示或隐藏其预测轨迹
@@ -797,7 +1002,9 @@ document.addEventListener('DOMContentLoaded', () => {
         speedVal.textContent = '--'; // 清空速度显示
         bearingVal.textContent = '--'; // 清空航向显示
         warningLevelVal.textContent = '--';
-        statusPanel.className = 'panel'; // 重置状态面板的CSS样式
+        if (statusPanel) {
+            ['warning-level-0', 'warning-level-1', 'warning-level-2', 'warning-level-3'].forEach(cls => statusPanel.classList.remove(cls));
+        }
     }
 
     /**
@@ -927,12 +1134,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             // V4.9: 初始化 dailyWarningCount
             dailyWarningCount = data.count;
+            setWarningCardCount(dailyWarningCount);
+            recordWarningTrend(dailyWarningCount);
         } catch (error) {
             console.error("无法获取当天预警总数:", error);
             if (!isHistoryView) {
                 statsCount.textContent = '错误';
             }
             dailyWarningCount = 0; // 发生错误时重置计数
+            setWarningCardCount('--');
         }
     }
 
@@ -965,6 +1175,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isHistoryView) {
                 updateWarningList(todaysWarnings);
             }
+            if (!isNotificationCenterOpen) {
+                setNotificationBadge(0);
+            }
         } catch (error) {
             console.error("无法获取当天预警列表:", error);
             warningList.innerHTML = '<li>无法加载当天预警</li>';
@@ -986,6 +1199,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         warnings.forEach(w => {
             const li = document.createElement('li');
+            li.className = 'warning-entry';
             const time = new Date(w.timestamp).toLocaleString();
             const boatId = (w.boat_id || boatIdForHistory || '').trim(); // 确保 boatId 被清理
             const boatNameRaw = (w.boat_name || '').trim();
@@ -996,22 +1210,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const latText = Number.isFinite(latValue) ? latValue.toFixed(6) : '--';
 
             // 获取颜色
-            const levelColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${w.warning_level}-bg`).trim();
-            const levelTextColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${w.warning_level}-text`).trim();
+            const style = getComputedStyle(document.documentElement);
+            const levelColor = style.getPropertyValue(`--warning-level-${w.warning_level}-bg`).trim() || 'rgba(255,255,255,0.1)';
+            const levelTextColor = style.getPropertyValue(`--warning-level-${w.warning_level}-text`).trim() || '#fff';
+            
+            li.style.borderLeftColor = levelTextColor;
 
             li.innerHTML = `
-                <div class="warning-popup">
-                    <div class="warning-popup-level" style="background-color: ${levelColor}; color: ${levelTextColor};">
-                        <span>${escapeHtml(String(w.warning_level))}</span>
-                    </div>
-                    <div class="warning-popup-info">
-                        <div class="boat-info">
-                            <span class="boat-name">${escapeHtml(boatName)}</span>
-                            <span class="boat-id">${escapeHtml(boatId)}</span>
-                        </div>
-                        <div class="time-info">${escapeHtml(time)}</div>
-                        <div class="location-info">经度: ${escapeHtml(lonText)}, 纬度: ${escapeHtml(latText)}</div>
-                    </div>
+                <div class="warning-entry-header">
+                    <span class="level-pill" style="background:${levelColor};color:${levelTextColor};">L${escapeHtml(String(w.warning_level))}</span>
+                    <span class="boat-name">${escapeHtml(boatName)}</span>
+                    <span class="boat-id">${escapeHtml(boatId)}</span>
+                </div>
+                <div class="warning-entry-body">
+                    <span>${escapeHtml(time)}</span>
+                    <span>经度: ${escapeHtml(lonText)} / 纬度: ${escapeHtml(latText)}</span>
                 </div>
             `;
             warningList.appendChild(li);
@@ -1028,35 +1241,32 @@ document.addEventListener('DOMContentLoaded', () => {
     queryHistoryBtn.addEventListener('click', queryHistory);
     clearHistoryBtn.addEventListener('click', clearHistory);
 
-    // 新增：侧边栏切换事件
-    leftSidebarToggle.addEventListener('click', () => {
-        leftSidebar.classList.toggle('is-expanded');
-        if (leftSidebar.classList.contains('is-expanded')) {
-            leftSidebarToggle.style.left = leftSidebar.offsetWidth + 'px'; // 移动到侧边栏右边缘
-            leftSidebarToggle.textContent = '>';
-        } else {
-            leftSidebarToggle.style.left = '0'; // 移回屏幕左边缘
-            leftSidebarToggle.textContent = '<';
-        }
-    });
-
-    // 右侧侧边栏切换逻辑已移除
-
-
-    // 切换标签显示事件
-    toggleLabelsBtn.addEventListener('click', () => {
-        showLabels = !showLabels; // 切换状态
-        toggleLabelsBtn.textContent = showLabels ? '隐藏标签' : '显示标签'; // 更新按钮文本
-        Object.values(boatsData).forEach(boat => {
-            if (boat.label) {
-                if (showLabels) {
-                    boat.label.addTo(map);
-                } else {
-                    map.removeLayer(boat.label);
-                }
-            }
+    if (drawerButtons.length) {
+        drawerButtons.forEach(btn => {
+            btn.addEventListener('click', () => setActiveDrawer(btn.dataset.drawerTarget));
         });
-    });
+        setActiveDrawer('history');
+    }
+    if (notificationToggle) {
+        notificationToggle.addEventListener('click', () => toggleNotificationCenter());
+    }
+    if (notificationClose) {
+        notificationClose.addEventListener('click', () => toggleNotificationCenter(false));
+    }
+    startClock();
+
+    if (toggleLabelsBtn) {
+        toggleLabelsBtn.addEventListener('click', () => toggleLabels());
+    }
+    if (mapLabelsToggleBtn) {
+        mapLabelsToggleBtn.addEventListener('click', () => toggleLabels());
+    }
+    if (recenterBtn) {
+        recenterBtn.addEventListener('click', recenterMap);
+    }
+    if (toggleStyleBtn) {
+        toggleStyleBtn.addEventListener('click', toggleBaseLayer);
+    }
 
     /**
      * 创建并显示一个新的预警弹窗项。
@@ -1064,60 +1274,47 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function showWarning(data) {
         const { level, name, id, time, lon, lat } = data;
-
-        // 1. 创建新的弹窗元素
-        const warningEl = document.createElement('div');
-        warningEl.className = 'warning-popup';
-
-        // 2. 获取颜色
-        const levelColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${level}-bg`).trim();
-        const levelTextColor = getComputedStyle(document.documentElement).getPropertyValue(`--warning-level-${level}-text`).trim();
-
-        // 3. 填充内容
-        const levelText = escapeHtml(String(level));
-        const nameText = escapeHtml(name);
-        const idText = escapeHtml(id);
-        const timeText = escapeHtml(time);
+        if (!toastContainer) return;
+        const normalizedLevel = Math.min(Math.max(Number(level) || 0, 0), 3);
         const lonNumber = Number(lon);
         const latNumber = Number(lat);
         const lonText = Number.isFinite(lonNumber) ? lonNumber.toFixed(6) : '--';
         const latText = Number.isFinite(latNumber) ? latNumber.toFixed(6) : '--';
+
+        const warningEl = document.createElement('div');
+        warningEl.className = `warning-toast level-${normalizedLevel}`;
         warningEl.innerHTML = `
-            <div class="warning-popup-level" style="background-color: ${levelColor}; color: ${levelTextColor};">
-                <span>${levelText}</span>
-            </div>
-            <div class="warning-popup-info">
-                <div class="boat-info">
-                    <span class="boat-name">${nameText}</span>
-                    <span class="boat-id">${idText}</span>
-                </div>
-                <div class="time-info">${timeText}</div>
-                <div class="location-info">经度: ${escapeHtml(lonText)}, 纬度: ${escapeHtml(latText)}</div>
+            <div class="toast-level">${escapeHtml(String(normalizedLevel))}</div>
+            <div class="toast-meta">
+                <strong>${escapeHtml(name)}</strong>
+                <span>${escapeHtml(id)} · ${escapeHtml(time)}</span>
+                <span>经度: ${escapeHtml(lonText)} / 纬度: ${escapeHtml(latText)}</span>
             </div>
         `;
 
-        // 4. 将新弹窗添加到容器顶部
-        warningContainer.prepend(warningEl);
-
-        // 5. 限制最大显示数量，例如最多显示5个
-        const maxWarnings = 5;
-        while (warningContainer.children.length > maxWarnings) {
-            warningContainer.removeChild(warningContainer.lastChild);
+        toastContainer.prepend(warningEl);
+        const maxWarnings = 4;
+        while (toastContainer.children.length > maxWarnings) {
+            toastContainer.removeChild(toastContainer.lastChild);
         }
 
-        // 新增功能：播放提示音
         if (warningSound) {
             warningSound.currentTime = 0;
             warningSound.play().catch(error => console.error("音频播放失败: 请确保 'frontend/sounds/warning.wav' 文件存在。", error));
         }
 
-        // 新增功能：平滑移动地图视角到预警船只
+        bumpNotificationBadge();
+
         if (Number.isFinite(latNumber) && Number.isFinite(lonNumber)) {
-            const targetLatLng = [latNumber, lonNumber];
-            map.flyTo(targetLatLng, 12, { // 飞到目标坐标，缩放级别设为12
+            map.flyTo([latNumber, lonNumber], 12, {
                 animate: true,
-                duration: 1.5 // 动画持续时间1.5秒
+                duration: 1.2
             });
         }
+
+        setTimeout(() => {
+            warningEl.classList.add('fade-out');
+            warningEl.addEventListener('animationend', () => warningEl.remove());
+        }, 5600);
     }
 });

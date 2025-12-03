@@ -11,120 +11,184 @@
     <!-- 引入我们自己的CSS文件 -->
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="theme-dark">
 
-    <div id="map"></div>
+    <div id="map-container">
+        <div id="map"></div>
 
-    <!-- 左侧边栏 -->
-    <div id="left-sidebar" class="sidebar">
-        <div id="history-query-panel" class="panel">
-            <h2>历史查询</h2>
-            <div class="form-group-inline">
-                <label for="history-boat-select">选择船只</label>
-                <select id="history-boat-select">
-                    <option value="all_boats">-- 所有船只 --</option>
-                    <option value="">-- 请选择船只 --</option>
-                    <!-- 船只列表将由JS动态填充 -->
-                </select>
-            </div>
-            <div class="form-group-inline">
-                <label for="start-time">开始时间</label>
-                <input type="datetime-local" id="start-time">
-            </div>
-            <div class="form-group-inline">
-                <label for="end-time">结束时间</label>
-                <input type="datetime-local" id="end-time">
-            </div>
-            <button id="query-history-btn" class="action-btn">查询</button>
-            <button id="clear-history-btn" class="action-btn">清除</button>
-        </div>
-        <div id="warning-stats-panel" class="panel">
-            <h2>
-                预警统计
-                <span class="info-icon">?
-                    <div class="tooltip">
-                        <p><strong>等级 1 (最高): 已越界</strong><br>船只当前物理位置已在许可渔区之外。</p>
-                        <p><strong>等级 2 (次高): 即将越界</strong><br>根据较短时间预测，船只即将越界。</p>
-                        <p><strong>等级 3 (普通): 越界风险</strong><br>根据较长时间预测，船只存在越界风险。</p>
-                        <p><strong>等级 0: 安全</strong><br>无越界风险。</p>
+        <div class="hud-overlay">
+            <div class="hud glass-panel">
+                <div class="hud-branding">
+                    <div>
+                        <p class="product-badge">Command Center</p>
+                        <h1>渔船离境智能预警系统</h1>
+                        <p class="product-desc">实时监测 · 预警联动 · 智能分析</p>
                     </div>
-                </span>
-            </h2>
-            <div id="stats-content">
-                <h3 id="stats-title">当日预警总数</h3>
-                <p id="stats-count">--</p>
-            </div>
-        </div>
-        <div id="warning-list-panel" class="panel">
-            <h2>预警信息列表</h2>
-            <ul id="warning-list">
-                <!-- 预警信息将由JS动态填充 -->
-            </ul>
-        </div>
-    </div>
-    <button id="left-sidebar-toggle" class="sidebar-toggle left-toggle"><</button>
-
-    <!-- 右侧边栏 -->
-    <div id="right-sidebar" class="sidebar">
-        <div id="system-status-panel" class="panel">
-            <div class="status-item">
-                <strong>服务器连接状态:</strong>
-                <span id="status-text" style="color: red;">未连接</span>
-            </div>
-        </div>
-        <div id="boat-list-panel" class="panel">
-            <h2>
-                <span>船只列表</span>
-                <button id="toggle-labels-btn" class="action-btn">显示地图标签</button>
-            </h2>
-            <ul id="boat-list">
-                <!-- 船只列表将由JS动态填充 -->
-            </ul>
-        </div>
-        <div id="status-panel" class="panel">
-            <h2>实时状态 (当前选中)</h2>
-            <div class="view-control">
-                <input type="checkbox" id="lock-view-checkbox" checked>
-                <label for="lock-view-checkbox">锁定视角</label>
-            </div>
-            <div id="status-content">
-                <div class="status-item">
-                    <strong>MMSI</strong>
-                    <span id="boat-id-val">--</span>
+                    <div class="hud-actions">
+                        <div class="connection-pill">
+                            <span class="indicator-dot"></span>
+                            <span id="status-text">未连接</span>
+                        </div>
+                        <div class="hud-clock" id="hud-clock">--:--:--</div>
+                        <button id="notification-toggle" class="ghost-btn">
+                            <span>🔔</span>
+                            <span class="badge" id="notification-count">0</span>
+                        </button>
+                    </div>
                 </div>
-                <div class="status-item">
-                    <strong>船只名称</strong>
-                    <span id="boat-name-val">--</span>
-                </div>
-                <div class="status-item">
-                    <strong>经度</strong>
-                    <span id="lon-val">--</span>
-                </div>
-                <div class="status-item">
-                    <strong>纬度</strong>
-                    <span id="lat-val">--</span>
-                </div>
-                <div class="status-item">
-                    <strong>速度</strong>
-                    <span id="speed-val">-- knots</span>
-                </div>
-                <div class="status-item">
-                    <strong>航向</strong>
-                    <span id="bearing-val">-- °</span>
-                </div>
-                <div class="status-item">
-                    <strong>预警等级</strong>
-                <span id="warning-level-val">--</span>
+                <div class="hud-metrics">
+                    <div class="hud-metric" data-icon="🛰">
+                        <p>在线船只</p>
+                        <span id="stat-online-boats">--</span>
+                    </div>
+                    <div class="hud-metric with-sparkline" data-icon="⚠">
+                        <p>当日预警</p>
+                        <div class="metric-value">
+                            <span id="stat-warning-count">--</span>
+                            <svg id="warning-sparkline" viewBox="0 0 120 32" preserveAspectRatio="none">
+                                <polyline id="warning-sparkline-path" points=""></polyline>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="hud-metric" data-icon="🔥">
+                        <p>最高风险等级</p>
+                        <span id="stat-highest-risk">--</span>
+                    </div>
+                    <div class="hud-metric" data-icon="🎯">
+                        <p>当前选中</p>
+                        <span id="stat-selected-boat">未选择</span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- 渔船预警信息列表容器 -->
-        <div id="warning-container">
-            <!-- 预警信息将由JS动态填充 -->
+        <div class="floating-toolbar glass-panel">
+            <button id="recenter-btn" class="tool-btn" title="视角回中">⌖</button>
+            <button id="toggle-style-btn" class="tool-btn" title="切换底图">🗺</button>
+            <button id="map-labels-toggle" class="tool-btn" title="显示标签">✦</button>
+        </div>
+
+        <div class="legend-panel glass-panel">
+            <h3>预警图例</h3>
+            <ul>
+                <li><span class="legend-dot level-1"></span>等级 1 · 已越界</li>
+                <li><span class="legend-dot level-2"></span>等级 2 · 即将越界</li>
+                <li><span class="legend-dot level-3"></span>等级 3 · 越界风险</li>
+                <li><span class="legend-dot level-0"></span>等级 0 · 安全</li>
+            </ul>
         </div>
     </div>
-    <!-- <button id="right-sidebar-toggle" class="sidebar-toggle right-toggle">></button> -->
+
+    <div class="drawer">
+        <div class="drawer-nav glass-panel">
+            <button class="drawer-btn active" data-drawer-target="history">历史</button>
+            <button class="drawer-btn" data-drawer-target="analytics">统计</button>
+        </div>
+        <div class="drawer-panels">
+            <div class="drawer-panel glass-panel is-active" id="drawer-history">
+                <h2>历史查询</h2>
+                <div class="form-group-inline">
+                    <label for="history-boat-select">选择船只</label>
+                    <select id="history-boat-select">
+                        <option value="all_boats">-- 所有船只 --</option>
+                        <option value="">-- 请选择船只 --</option>
+                    </select>
+                </div>
+                <div class="form-group-inline">
+                    <label for="start-time">开始时间</label>
+                    <input type="datetime-local" id="start-time">
+                </div>
+                <div class="form-group-inline">
+                    <label for="end-time">结束时间</label>
+                    <input type="datetime-local" id="end-time">
+                </div>
+                <div class="drawer-actions">
+                    <button id="query-history-btn" class="action-btn">查询</button>
+                    <button id="clear-history-btn" class="ghost-btn">清除</button>
+                </div>
+            </div>
+            <div class="drawer-panel glass-panel" id="drawer-analytics">
+                <h2>预警统计</h2>
+                <div class="drawer-stats">
+                    <div id="warning-stats-panel">
+                        <div class="info-line">
+                            <strong id="stats-title">当日预警总数</strong>
+                            <span id="stats-count">--</span>
+                        </div>
+                        <p class="muted">当日或查询区间内触发的预警总计。</p>
+                    </div>
+                    <div class="legend-card">
+                        <h4>预警等级说明</h4>
+                        <ul>
+                            <li><strong>等级 1</strong> - 已越界</li>
+                            <li><strong>等级 2</strong> - 即将越界</li>
+                            <li><strong>等级 3</strong> - 越界风险</li>
+                            <li><strong>等级 0</strong> - 安全</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="floating-stack">
+        <div class="floating-card glass-panel" id="boat-list-card">
+            <div class="card-header">
+                <h2>在线船只</h2>
+                <button id="toggle-labels-btn" class="ghost-btn">显示标签</button>
+            </div>
+            <ul id="boat-list"></ul>
+        </div>
+        <div class="floating-card glass-panel" id="status-panel">
+            <div class="card-header">
+                <h2>实时状态</h2>
+                <label class="switch">
+                    <input type="checkbox" id="lock-view-checkbox" checked>
+                    <span>锁定视角</span>
+                </label>
+            </div>
+            <div class="status-grid" id="status-content">
+                <div class="status-item">
+                    <p>MMSI</p>
+                    <strong id="boat-id-val">--</strong>
+                </div>
+                <div class="status-item">
+                    <p>船只名称</p>
+                    <strong id="boat-name-val">--</strong>
+                </div>
+                <div class="status-item">
+                    <p>经度</p>
+                    <strong id="lon-val">--</strong>
+                </div>
+                <div class="status-item">
+                    <p>纬度</p>
+                    <strong id="lat-val">--</strong>
+                </div>
+                <div class="status-item">
+                    <p>速度 (kn)</p>
+                    <strong id="speed-val">--</strong>
+                </div>
+                <div class="status-item">
+                    <p>航向 (°)</p>
+                    <strong id="bearing-val">--</strong>
+                </div>
+                <div class="status-item warning-pill">
+                    <p>预警等级</p>
+                    <strong id="warning-level-val">--</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification-center" class="notification-panel glass-panel hidden">
+        <div class="notification-header">
+            <h3>预警通知中心</h3>
+            <button id="notification-close" class="ghost-btn">关闭</button>
+        </div>
+        <ul id="warning-list"></ul>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
 
     <!-- 引入 Leaflet JS 文件 -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"

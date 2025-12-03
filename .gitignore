@@ -1,7 +1,9 @@
-# Ignore large data files
 resources/
 frontend/data/fishing_zones.geojson
 database.db
-backend/_pycache_/
 .idea/
-Scripts/_pycache_/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class

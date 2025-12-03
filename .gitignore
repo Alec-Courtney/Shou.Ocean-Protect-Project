@@ -2,3 +2,6 @@
 resources/
 frontend/data/fishing_zones.geojson
 database.db
+backend/_pycache_/
+.idea/
+Scripts/_pycache_/
